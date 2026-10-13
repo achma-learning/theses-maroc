@@ -1,0 +1,1040 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Archive des thèses</title>
+  <meta name="description" content="Recherche locale dans les thèses soutenues à la FMPM, la FMPR (médecine, pharmacie) et la FMP Fès, plus renvoi vers Toubkal et les autres sources.">
+  <!-- Privacy (same rule as searchAIO): never leak this page's URL to search engines or font hosts. -->
+  <meta name="referrer" content="no-referrer">
+  <meta name="theme-color" content="#001f3f">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='27' font-size='28'>🎓</text></svg>">
+  <link rel="preconnect" href="https://fonts.bunny.net" crossorigin>
+  <link href="https://fonts.bunny.net/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    /* ---------- Tokens (light) ---------- */
+    :root {
+      color-scheme: light;
+      --ui-font: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      --text-font: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      --page-bg: linear-gradient(135deg, #000022 0%, #051937 50%, #001f3f 100%);
+      --page-bg-solid: #051937;
+      --card: #ffffff;
+      --panel: #f4f5f8;
+      --border: #dfe2e8;
+      --text-primary: #14161a;
+      --text-secondary: #4d525c;
+      --text-muted: #6f7480;
+      --accent: #7c3aed;
+      --accent-soft: rgba(124, 58, 237, .12);
+      --focus: rgba(156, 90, 242, .45);
+      --mark-bg: #fff1a8;
+      --mark-text: #14161a;
+      --warn-bg: #fff4e5;
+      --warn-text: #8a4b00;
+      --bar: #2a78d6;
+      --bar-hover: #1c5cab;
+      /* Faculty identity (validated categorical slots 1-4, always shown next to a text label) */
+      --fac-fmpm: #2a78d6;
+      --fac-fmprm: #eb6834;
+      --fac-fmprp: #1baf7a;
+      --fac-fmpdf: #eda100;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:where(:not([data-theme="light"])) {
+        color-scheme: dark;
+        --card: #161d2a;
+        --panel: #1e2737;
+        --border: #2d3a50;
+        --text-primary: #eef0f4;
+        --text-secondary: #c2c7d1;
+        --text-muted: #949bab;
+        --accent: #a78bfa;
+        --accent-soft: rgba(167, 139, 250, .16);
+        --mark-bg: #5c4d00;
+        --mark-text: #fff7cc;
+        --warn-bg: #3a2a12;
+        --warn-text: #ffcf8a;
+        --bar: #3987e5;
+        --bar-hover: #86b6ef;
+        --fac-fmpm: #3987e5;
+        --fac-fmprm: #d95926;
+        --fac-fmprp: #199e70;
+        --fac-fmpdf: #c98500;
+      }
+    }
+    :root[data-theme="dark"] {
+      color-scheme: dark;
+      --card: #161d2a;
+      --panel: #1e2737;
+      --border: #2d3a50;
+      --text-primary: #eef0f4;
+      --text-secondary: #c2c7d1;
+      --text-muted: #949bab;
+      --accent: #a78bfa;
+      --accent-soft: rgba(167, 139, 250, .16);
+      --mark-bg: #5c4d00;
+      --mark-text: #fff7cc;
+      --warn-bg: #3a2a12;
+      --warn-text: #ffcf8a;
+      --bar: #3987e5;
+      --bar-hover: #86b6ef;
+      --fac-fmpm: #3987e5;
+      --fac-fmprm: #d95926;
+      --fac-fmprp: #199e70;
+      --fac-fmpdf: #c98500;
+    }
+
+    * { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--page-bg-solid);
+      background: var(--page-bg);
+      background-attachment: fixed;
+      color: var(--text-primary);
+      font-family: var(--ui-font);
+      font-size: 14px;
+      padding: 24px 16px 48px;
+    }
+    a { color: var(--accent); }
+    button, input, select { font: inherit; color: inherit; }
+    .wrap {
+      max-width: 1100px;
+      margin: 0 auto;
+      background: var(--card);
+      border-radius: 16px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, .35);
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+    header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+    header > div:first-child { flex: 1 1 320px; min-width: 0; }
+    h1 { margin: 0; font-size: 1.35rem; letter-spacing: -.01em; }
+    .sub { margin: 4px 0 0; color: var(--text-secondary); font-size: .85rem; }
+    .head-actions { display: flex; gap: 8px; }
+    .icon-btn {
+      border: 1px solid var(--border); background: var(--panel); border-radius: 8px;
+      padding: 6px 10px; cursor: pointer; font-size: .85rem;
+    }
+    .icon-btn:hover { border-color: var(--accent); }
+    .icon-btn:focus-visible, .chip:focus-within, input:focus-visible, select:focus-visible, button:focus-visible, a:focus-visible {
+      outline: none; box-shadow: 0 0 0 3px var(--focus);
+    }
+
+    /* ---------- Search bar ---------- */
+    .search { position: relative; }
+    .search input[type=search] {
+      width: 100%; padding: 14px 16px 14px 44px; font-size: 16px; font-weight: 500;
+      border: 2px solid var(--border); border-radius: 10px; background: var(--panel);
+    }
+    .search input[type=search]:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 4px var(--focus); }
+    .search .glass { position: absolute; left: 15px; top: 50%; transform: translateY(-50%); pointer-events: none; opacity: .7; }
+    .hint { margin: 6px 2px 0; color: var(--text-muted); font-size: .78rem; line-height: 1.5; }
+    .hint code { background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; }
+
+    /* ---------- Filters ---------- */
+    .filters { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+    .chip {
+      display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px;
+      border: 1px solid var(--border); border-radius: 999px; background: var(--panel);
+      cursor: pointer; user-select: none; font-size: .82rem;
+    }
+    .chip input { margin: 0; accent-color: var(--accent); }
+    .chip .count { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+    .chip:has(input:not(:checked)) { opacity: .55; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+    .ctl { display: inline-flex; align-items: center; gap: 6px; font-size: .82rem; color: var(--text-secondary); }
+    .ctl input[type=number] { width: 5.2em; padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); }
+    .ctl select { padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); }
+    .ctl input[type=checkbox] { accent-color: var(--accent); }
+
+    /* ---------- Status / loader ---------- */
+    .status { font-size: .8rem; color: var(--text-secondary); display: flex; flex-wrap: wrap; gap: 6px 14px; }
+    .status .err { color: var(--warn-text); }
+    .loader-panel {
+      border: 1px dashed var(--border); border-radius: 12px; padding: 16px; background: var(--warn-bg); color: var(--warn-text);
+      font-size: .85rem; line-height: 1.6;
+    }
+    .loader-panel code { background: rgba(0,0,0,.08); padding: 1px 5px; border-radius: 4px; }
+    .loader-panel .pick { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+    .loader-panel label.btn {
+      display: inline-block; padding: 8px 12px; border-radius: 8px; cursor: pointer;
+      background: var(--accent); color: #fff; font-weight: 600;
+    }
+    .loader-panel input[type=file] { display: none; }
+
+    /* ---------- Summary + chart ---------- */
+    .summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; }
+    .summary .big { font-size: 1.6rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .summary .muted { color: var(--text-muted); font-size: .82rem; }
+    .chart { position: relative; }
+    .chart-title { font-size: .78rem; color: var(--text-secondary); margin: 0 0 6px; }
+    .bars { display: flex; align-items: flex-end; gap: 2px; height: 90px; border-bottom: 1px solid var(--border); }
+    .bar-slot { flex: 1 1 0; height: 100%; display: flex; align-items: flex-end; cursor: pointer; min-width: 0; }
+    .bar { width: 100%; background: var(--bar); border-radius: 4px 4px 0 0; min-height: 0; }
+    .bar-slot:hover .bar, .bar-slot.on .bar { background: var(--bar-hover); }
+    .axis { display: flex; justify-content: space-between; font-size: .7rem; color: var(--text-muted); margin-top: 4px; font-variant-numeric: tabular-nums; }
+    .tip {
+      position: absolute; pointer-events: none; z-index: 5; background: var(--card); color: var(--text-primary);
+      border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: .75rem;
+      box-shadow: 0 6px 20px rgba(0,0,0,.2); white-space: nowrap; display: none;
+    }
+    .tip b { font-size: .85rem; }
+    .tip .row { display: flex; align-items: center; gap: 6px; }
+
+    /* ---------- Results ---------- */
+    .tools { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; align-items: center; }
+    .results { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+    .res { padding: 12px 4px; border-top: 1px solid var(--border); display: grid; grid-template-columns: 1fr; gap: 4px; }
+    .res-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: .75rem; color: var(--text-secondary); }
+    .fac { display: inline-flex; align-items: center; gap: 5px; font-weight: 700; color: var(--text-primary); }
+    .tag { font-size: .7rem; padding: 1px 6px; border-radius: 4px; background: var(--warn-bg); color: var(--warn-text); }
+    .res-title { font-family: var(--text-font); font-size: 1rem; font-weight: 600; line-height: 1.4; overflow-wrap: anywhere; }
+    .res-people { font-family: var(--text-font); font-size: .86rem; color: var(--text-secondary); }
+    .res-people .lbl { color: var(--text-muted); font-family: var(--ui-font); font-size: .72rem; }
+    .res-links { display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: .75rem; margin-top: 2px; }
+    .res-links a, .res-links button { color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: none; font-size: .75rem; }
+    .res-links a:hover, .res-links button:hover { text-decoration: underline; }
+    .abstract { font-family: var(--text-font); font-size: .85rem; line-height: 1.55; color: var(--text-secondary); background: var(--panel); border-radius: 8px; padding: 10px 12px; white-space: pre-wrap; }
+    mark { background: var(--mark-bg); color: var(--mark-text); border-radius: 2px; padding: 0 1px; }
+    .more { align-self: center; margin-top: 8px; }
+    .btn {
+      border: 1px solid var(--accent); background: var(--accent); color: #fff; border-radius: 8px;
+      padding: 8px 14px; cursor: pointer; font-weight: 600; font-size: .82rem;
+    }
+    .btn.ghost { background: transparent; color: var(--accent); }
+    .empty { color: var(--text-muted); padding: 20px 4px; text-align: center; }
+
+    /* ---------- External sources ---------- */
+    details.ext { border: 1px solid var(--border); border-radius: 12px; background: var(--panel); }
+    details.ext > summary { cursor: pointer; padding: 12px 14px; font-weight: 700; list-style: none; }
+    details.ext > summary::-webkit-details-marker { display: none; }
+    details.ext > summary::before { content: '▸ '; }
+    details.ext[open] > summary::before { content: '▾ '; }
+    .ext-body { padding: 0 14px 14px; display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; }
+    .ext-group h3 { margin: 0 0 6px; font-size: .78rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .04em; }
+    .ext-group ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+    .ext-group button.link {
+      width: 100%; text-align: left; background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+      padding: 6px 9px; cursor: pointer; font-size: .8rem; display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+    }
+    .ext-group button.link:hover { border-color: var(--accent); }
+    .ext-group .kind { color: var(--text-muted); font-size: .7rem; }
+    .ext-note { grid-column: 1 / -1; font-size: .75rem; color: var(--text-muted); margin: 0; }
+
+    .toast {
+      position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: #14161a; color: #fff;
+      padding: 10px 16px; border-radius: 8px; font-size: .82rem; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 50;
+      max-width: calc(100vw - 32px);
+    }
+    .toast.show { opacity: 1; }
+    footer { font-size: .72rem; color: var(--text-muted); line-height: 1.6; }
+
+    @media (max-width: 600px) {
+      body { padding: 12px 8px 40px; }
+      .wrap { padding: 16px; border-radius: 12px; }
+      .bars { height: 70px; }
+    }
+    @media (prefers-reduced-motion: reduce) { .toast { transition: none; } }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>🎓 Archive des thèses — Maroc</h1>
+      <p class="sub">FMPM Marrakech · FMPR Rabat (médecine, pharmacie) · FMP Fès — recherche hors ligne dans les listes publiques des facultés, puis renvoi vers Toubkal et les autres sources.</p>
+    </div>
+    <div class="head-actions">
+      <button class="icon-btn" id="themeBtn" type="button" title="Thème clair / sombre">🌓</button>
+      <button class="icon-btn" id="helpBtn" type="button" title="Syntaxe de recherche" aria-expanded="false">?</button>
+    </div>
+  </header>
+
+  <form class="search" id="searchForm" role="search" autocomplete="off">
+    <span class="glass" aria-hidden="true">🔎</span>
+    <input type="search" id="q" placeholder="ex. lupus · &quot;pied bot&quot; · diabete -type2 · auteur:benani · annee:2015-2020" spellcheck="false" aria-label="Rechercher une thèse" autofocus>
+    <p class="hint" id="hint" hidden>
+      Sans accents ni majuscules : <code>diabete</code> trouve « DIABÈTE ». Tous les mots doivent être présents.
+      <code>"pied bot"</code> expression exacte · <code>-enfant</code> exclure · <code>lupus|les</code> l'un ou l'autre ·
+      <code>titre:</code> <code>auteur:</code> <code>rapporteur:</code> <code>code:</code> <code>resume:</code> cibler un champ ·
+      <code>annee:2020</code> <code>annee:2015-2020</code> <code>annee:&gt;2018</code> · <code>fac:fes</code> (<code>fmpm</code>, <code>fmpr</code>, <code>med</code>, <code>pharma</code>, <code>fes</code>).
+      Bangs (comme searchAIO, ouvrent la source externe avec Entrée) : <code>!toubkal</code> <code>!t2</code> <code>!opac</code> <code>!gfmpm</code> <code>!gfes</code> <code>!these</code> <code>!cismef</code>.
+      Raccourcis : <code>/</code> rechercher · <code>Échap</code> effacer.
+    </p>
+  </form>
+
+  <div class="filters" aria-label="Filtres">
+    <div class="chips" id="facChips"></div>
+    <label class="ctl">Années <input type="number" id="y1" inputmode="numeric" placeholder="1969"> – <input type="number" id="y2" inputmode="numeric" placeholder="2026"></label>
+    <label class="ctl">Tri
+      <select id="sort">
+        <option value="rel">pertinence</option>
+        <option value="new">plus récentes</option>
+        <option value="old">plus anciennes</option>
+      </select>
+    </label>
+    <label class="ctl" title="« rein » ne trouve pas « freins » ; « diabet » trouve « diabétique »"><input type="checkbox" id="wordStart" checked> début de mot</label>
+    <label class="ctl" title="Masquer les thèses non soutenues / reportées / lignes vides"><input type="checkbox" id="hideNs"> soutenues seulement</label>
+    <label class="ctl" hidden title="Charge le CSV complet de Fès (≈35 Mo) : rapporteur + résumé de 99 % des thèses"><input type="checkbox" id="abs"> résumés + rapporteurs Fès <span id="absState"></span></label>
+  </div>
+
+  <div class="status" id="status" aria-live="polite">Chargement des listes…</div>
+  <div class="loader-panel" id="loaderPanel" hidden></div>
+
+  <section aria-label="Résumé des résultats">
+    <div class="summary">
+      <span class="big" id="total">–</span>
+      <span id="totalLbl">thèses</span>
+      <span class="muted" id="timing"></span>
+    </div>
+    <div class="chart" id="chart">
+      <p class="chart-title" id="chartTitle">Thèses par année — cliquez une barre pour filtrer l'année</p>
+      <div class="bars" id="bars" role="list"></div>
+      <div class="axis" id="axis"></div>
+      <div class="tip" id="tip" role="tooltip"></div>
+    </div>
+  </section>
+
+  <div class="tools">
+    <span class="muted" id="shown" style="color:var(--text-muted);font-size:.8rem"></span>
+    <span style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn ghost" id="copyLink" type="button">🔗 Lien de cette recherche</button>
+      <button class="btn ghost" id="exportCsv" type="button">⬇ Exporter CSV</button>
+    </span>
+  </div>
+
+  <ol class="results" id="results"></ol>
+  <button class="btn more" id="moreBtn" type="button" hidden>Afficher plus</button>
+
+  <details class="ext" id="ext">
+    <summary>🌐 Chercher ailleurs (Toubkal, OPAC, texte intégral…)</summary>
+    <div class="ext-body" id="extBody"></div>
+  </details>
+
+  <footer>
+    Données : <code>archive/**/theses-*.csv</code> de ce site (sources et limites : <a href="archive/sources-theses-maroc.md">archive/sources-theses-maroc.md</a>).
+    Les listes de Rabat sont en MAJUSCULES et souvent sans accents ; la FMPM a 385 titres tronqués « … » et 2023 s'arrête au n° 261 ; Fès : liste complète 2007-2026, sans les résumés.
+    Vérifiez toujours un sujet sur <a href="https://toubkal.imist.ma/search" target="_blank" rel="noopener noreferrer">Toubkal</a> avant de le déposer.
+  </footer>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+'use strict';
+
+/* =====================================================================
+   1. SOURCES — the only place that knows file paths and column names.
+      If a CSV is renamed after a re-extraction, update `file` (and the
+      `match` regex used by the folder picker) here.
+   ===================================================================== */
+const SOURCES = [
+  {
+    id: 'fmpm', label: 'FMPM', long: 'FMPM Marrakech', filiere: 'Médecine', city: 'Marrakech',
+    fullName: 'Faculté de Médecine et de Pharmacie de Marrakech',
+    file: 'archive/fmpm/theses-fmpm-2006-2026.csv', match: /^theses-fmpm-\d{4}-\d{4}\.csv$/,
+    map: r => ({ year: r['Année'], num: r['N°'], author: r['Auteur'], title: r['Titre'],
+                 pdf: r['PDF (texte intégral)'], article: r['Article (résumé, 2006-2014)'] })
+  },
+  {
+    id: 'fmprm', label: 'FMPR Méd.', long: 'FMPR Rabat — Médecine', filiere: 'Médecine', city: 'Rabat',
+    fullName: 'Faculté de Médecine et de Pharmacie de Rabat',
+    file: 'archive/fmpr/medecine/theses-fmpr-medecine-1969-2025.csv', match: /^theses-fmpr-medecine-\d{4}-\d{4}\.csv$/,
+    map: r => ({ year: r['ANNEE'], num: r['N°'], code: r['CODE'], author: r['NOM'], title: r['TITRE'],
+                 rapp: r['RAPPORTEUR / DIRECTEUR'], note: r['REMARQUE'], srcList: r['PDF SOURCE'] })
+  },
+  {
+    id: 'fmprp', label: 'FMPR Pharma', long: 'FMPR Rabat — Pharmacie', filiere: 'Pharmacie', city: 'Rabat',
+    fullName: 'Faculté de Médecine et de Pharmacie de Rabat',
+    file: 'archive/fmpr/pharmacie/theses-fmpr-pharmacie-1990-2025.csv', match: /^theses-fmpr-pharmacie-\d{4}-\d{4}\.csv$/,
+    map: r => ({ year: r['Année'], num: r['N°'], code: r['Numéro'], author: r['Auteur'], title: r['Titre'],
+                 rapp: r['Rapporteur / Directeur'], theme: r['Thème'],
+                 note: [r['Statut'] !== 'soutenue' ? r['Statut'] : '', r['Remarque']].filter(Boolean).join(' · '),
+                 srcList: r['Liste source (PDF)'] })
+  },
+  {
+    id: 'fmpdf', label: 'FMP Fès', long: 'FMPDF Fès', filiere: 'Médecine', city: 'Fès',
+    fullName: 'Faculté de Médecine, de Pharmacie et de Médecine Dentaire de Fès',
+    file: 'archive/fmpdf/theses-fmpf-2007-2026.csv', match: /^theses-fmpf-\d{4}-\d{4}\.csv$/,
+    map: r => ({ year: r['Année'], num: r['N°'], author: r['Auteur'], title: r['Titre'], pdf: r['PDF (texte intégral)'],
+                 code: (r['PDF (texte intégral)'] || '').replace(/^.*\/|\.(pdf|rar)$/gi, '') })
+  }
+];
+// Optional, heavy (≈35 MB): Fès abstracts + rapporteurs, merged into fmpdf rows by PDF link.
+const FES_FULL = { file: 'archive/fmpdf/theses-fmpf-2007-2026-complet.csv', match: /^theses-fmpf-\d{4}-\d{4}-complet\.csv$/ };
+
+/* =====================================================================
+   2. EXTERNAL SOURCES — mirrors archive/sources-theses-maroc.md (the source
+      of truth: add/remove a source there first, then here, same commit).
+      url(q) → opened with the query. paste:true → the site has no query URL:
+      the query is copied to the clipboard and the page opened (searchAIO's
+      "needing manual paste" idea).
+   ===================================================================== */
+const enc = encodeURIComponent;
+const EXTERNAL = [
+  { group: 'National', items: [
+    { id: 'toubkal', bang: 'toubkal', name: 'Toubkal — recherche nationale (IMIST)', url: q => `https://toubkal.imist.ma/search?query=${enc(q)}&submit=OK` },
+    { name: 'Toubkal — liste des communautés', url: () => 'https://toubkal.imist.ma/community-list', link: true }
+  ]},
+  { group: 'FMPM — Marrakech', items: [
+    { bang: 't2', name: 'These2.0 (mots-clés)', url: q => `https://thesefmpm.vercel.app/search?page=1&search=${enc(q)}` },
+    { bang: 'opac', name: 'OPAC bibliothèque FMPM (PMB)', url: q => `https://lib.fmpm.uca.ma/lib/opac_css/index.php?lvl=search_result&search_type_asked=simple_search&user_query=${enc(q)}` },
+    { bang: 'gfmpm', name: 'Google — texte intégral PDF FMPM', url: q => `https://www.google.com/search?q=${enc('site:wd.fmpm.uca.ma/biblio/theses ' + q)}` },
+    { name: 'Catalogue officiel par année', url: () => 'https://wd.fmpm.uca.ma/biblio/theses/Accueil.html', link: true },
+    { name: 'Toubkal — collection FMPM', url: () => 'https://toubkal.imist.ma/handle/123456789/3', link: true }
+  ]},
+  { group: 'FMPR — Rabat', items: [
+    { name: 'OPAC bibliothèque (PMB, non vérifié)', url: q => `http://biblio.medramo.ac.ma/opac_fmp/index.php?lvl=search_result&search_type_asked=simple_search&user_query=${enc(q)}` },
+    { name: 'Listes des thèses par année', url: () => 'http://biblio.medramo.ac.ma/bib/index.php/liste-des-theses-par-annee', link: true },
+    { name: 'Toubkal — collection FMPR (PDF)', url: () => 'https://toubkal.imist.ma/handle/123456789/22', link: true },
+    { name: 'Toubkal — Médecine dentaire Rabat', url: () => 'https://toubkal.imist.ma/handle/123456789/23', link: true }
+  ]},
+  { group: 'FMPDF — Fès', items: [
+    { bang: 'cdim', name: 'Base CDIM des thèses', url: () => 'https://cdim.fmp-usmba.ac.ma/theses/index.php', paste: true },
+    { bang: 'gfes', name: 'Google — texte intégral PDF Fès', url: q => `https://www.google.com/search?q=${enc('site:cdim.fmp-usmba.ac.ma/e_theses ' + q)}` },
+    { name: 'Mémoires de fin de spécialité', url: () => 'https://cdim.fmp-usmba.ac.ma/memoires/index.php', paste: true },
+    { name: 'Statistiques CDIM', url: () => 'https://cdim.fmp-usmba.ac.ma/stats/', link: true },
+    { name: 'Toubkal — collection Fès', url: () => 'https://toubkal.imist.ma/handle/123456789/51', link: true }
+  ]},
+  { group: 'FMPC — Casablanca', items: [
+    { name: 'Toubkal — collection FMPC', url: () => 'https://toubkal.imist.ma/handle/123456789/43', link: true },
+    { name: 'Gestion des thèses (formulaires)', url: () => 'https://www.fmpc.ac.ma/gestion-des-theses-formulaires-et-procedures/', link: true }
+  ]},
+  { group: 'Hors Maroc', items: [
+    { bang: 'these', name: 'Theses.fr (France)', url: q => `https://theses.fr/resultats?q=${enc(q)}` },
+    { bang: 'cismef', name: 'CISMeF — thèses et mémoires', url: q => `https://doccismef.chu-rouen.fr/dc/#env=thm&q=${enc(q)}` }
+  ]}
+];
+const BANGS = {};
+EXTERNAL.forEach(g => g.items.forEach(it => { if (it.bang) BANGS[it.bang] = it; }));
+
+/* =====================================================================
+   3. Helpers
+   ===================================================================== */
+const $ = id => document.getElementById(id);
+const COMBINING = /[̀-ͯ]/g;
+// Accent-, case- and apostrophe-insensitive form used for matching.
+function norm(s) {
+  return (s || '').normalize('NFD').replace(COMBINING, '').toLowerCase()
+    .replace(/[’‘`´]/g, "'").replace(/œ/g, 'oe').replace(/æ/g, 'ae');
+}
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+const reEsc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+function lsGet(k) { try { return localStorage.getItem(k); } catch (_) { return null; } }
+function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (_) { /* private mode */ } }
+let toastTimer;
+function toast(msg) {
+  const t = $('toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2600);
+}
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; }
+  catch (_) {
+    const ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    let ok = false; try { ok = document.execCommand('copy'); } catch (_) {}
+    ta.remove(); return ok;
+  }
+}
+function openExternal(url) { window.open(url, '_blank', 'noopener,noreferrer'); }
+
+// RFC 4180 CSV parser (quotes, doubled quotes, CRLF, BOM) → array of objects keyed by header.
+function parseCSV(text) {
+  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+  const rows = []; let row = [], field = '', i = 0, inQ = false;
+  const n = text.length;
+  while (i < n) {
+    const c = text[i];
+    if (inQ) {
+      if (c === '"') { if (text[i + 1] === '"') { field += '"'; i += 2; continue; } inQ = false; i++; continue; }
+      field += c; i++; continue;
+    }
+    if (c === '"') { inQ = true; i++; continue; }
+    if (c === ',') { row.push(field); field = ''; i++; continue; }
+    if (c === '\r') { i++; continue; }
+    if (c === '\n') { row.push(field); rows.push(row); row = []; field = ''; i++; continue; }
+    field += c; i++;
+  }
+  if (field !== '' || row.length) { row.push(field); rows.push(row); }
+  const head = rows.shift() || [];
+  return rows.filter(r => r.length > 1 || r[0]).map(r => {
+    const o = {}; head.forEach((h, k) => { o[h.trim()] = (r[k] || '').trim(); }); return o;
+  });
+}
+
+/* =====================================================================
+   4. Data store
+   ===================================================================== */
+const DB = [];                // all records
+const loaded = {};            // source id → row count | Error
+const SRC = Object.fromEntries(SOURCES.map(s => [s.id, s]));
+let fesFullState = 'off';     // off | loading | on | error
+let fesMerged = false;        // abstracts already merged into DB (toggle off/on must not re-download 35 MB)
+
+function addRecords(src, rows) {
+  for (let k = DB.length - 1; k >= 0; k--) if (DB[k].src === src.id) DB.splice(k, 1); // idempotent reload
+  for (const r of rows) {
+    const m = src.map(r);
+    if (!m.title && !m.author && !m.code && !m.note) continue;   // truly blank line; rows with only a code stay (they are in the official count)
+    const rec = {
+      src: src.id, year: parseInt(m.year, 10) || 0, num: m.num || '', code: m.code || '',
+      author: m.author || '', title: m.title || '', rapp: m.rapp || '', note: m.note || '',
+      theme: m.theme || '', pdf: m.pdf || '', article: m.article || '', srcList: m.srcList || '', abstract: ''
+    };
+    rec.ns = /non soutenue|reporter|ligne vide/i.test(rec.note);
+    rec.nT = norm(rec.title); rec.nA = norm(rec.author); rec.nR = norm(rec.rapp);
+    rec.nC = norm(rec.code); rec.nX = norm(rec.theme + ' ' + rec.note); rec.nAbs = '';
+    DB.push(rec);
+  }
+  loaded[src.id] = rows.length;
+}
+
+function mergeFesFull(rows) {
+  const byPdf = new Map(DB.filter(r => r.src === 'fmpdf').map(r => [r.pdf, r]));
+  let n = 0;
+  for (const r of rows) {
+    const rec = byPdf.get(r['PDF (texte intégral)']);
+    if (!rec) continue;
+    rec.rapp = r['Rapporteur'] || rec.rapp; rec.nR = norm(rec.rapp);
+    rec.abstract = r['Résumé'] || ''; rec.nAbs = norm(rec.abstract);
+    if (r['Code']) { rec.code = r['Code']; rec.nC = norm(rec.code); }
+    const ctl = r['Contrôle'];
+    if (ctl && ctl !== 'OK') { rec.note = ctl; rec.nX = norm(ctl); }
+    n++;
+  }
+  return n;
+}
+
+async function fetchText(path) {
+  const res = await fetch(path, { cache: 'no-cache' });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.text();
+}
+
+async function loadAll() {
+  const t0 = performance.now();
+  await Promise.all(SOURCES.map(async s => {
+    try { addRecords(s, parseCSV(await fetchText(s.file))); }
+    catch (e) { loaded[s.id] = e; }
+  }));
+  afterLoad(performance.now() - t0);
+}
+
+function afterLoad(ms) {
+  const ok = SOURCES.filter(s => typeof loaded[s.id] === 'number');
+  renderStatus(ms);
+  if (!ok.length) showLoaderPanel(); else $('loaderPanel').hidden = true;
+  buildChips();
+  if ($('abs').checked && !fesMerged && fesFullState !== 'loading') loadFesFull();
+  run();
+}
+
+function renderStatus(ms) {
+  const parts = SOURCES.map(s => {
+    const v = loaded[s.id];
+    if (typeof v === 'number') return `<span>✔ ${esc(s.long)} : ${v.toLocaleString('fr-FR')}</span>`;
+    if (v instanceof Error) return `<span class="err">✘ ${esc(s.long)} (${esc(v.message)})</span>`;
+    return `<span>… ${esc(s.long)}</span>`;
+  });
+  if (ms) parts.push(`<span>chargé en ${(ms / 1000).toFixed(1)} s</span>`);
+  $('status').innerHTML = parts.join('');
+}
+
+function showLoaderPanel() {
+  const p = $('loaderPanel');
+  const isFile = location.protocol === 'file:';
+  p.hidden = false;
+  p.innerHTML = `
+    <b>Les listes n'ont pas pu être lues automatiquement.</b>
+    ${isFile ? 'Le navigateur bloque la lecture des fichiers voisins quand la page est ouverte en <code>file://</code>.' : 'Les CSV ne sont pas à côté de cette page.'}
+    <br>Solution 1 : dans ce dossier, lancez <code>python3 -m http.server</code> puis ouvrez
+    <code>http://localhost:8000/index.html</code>.
+    <br>Solution 2 : choisissez le dossier <code>archive</code> (ou sélectionnez les fichiers <code>theses-*.csv</code>) :
+    <div class="pick">
+      <label class="btn">📁 Choisir le dossier archive<input type="file" id="pickDir" webkitdirectory multiple></label>
+      <label class="btn">📄 Choisir les CSV<input type="file" id="pickFiles" accept=".csv,text/csv" multiple></label>
+    </div>`;
+  $('pickDir').addEventListener('change', e => loadFromFiles(e.target.files));
+  $('pickFiles').addEventListener('change', e => loadFromFiles(e.target.files));
+}
+
+let pickedFesFull = null;     // File chosen via picker, used if the abstracts toggle is turned on
+async function loadFromFiles(fileList) {
+  const t0 = performance.now();
+  const files = Array.from(fileList || []);
+  for (const s of SOURCES) {
+    const f = files.find(f => s.match.test(f.name));
+    if (!f) continue;
+    try { addRecords(s, parseCSV(await f.text())); } catch (e) { loaded[s.id] = e; }
+  }
+  pickedFesFull = files.find(f => FES_FULL.match.test(f.name)) || null;
+  if (!SOURCES.some(s => typeof loaded[s.id] === 'number')) { toast('Aucun fichier theses-*.csv reconnu.'); return; }
+  afterLoad(performance.now() - t0);
+}
+
+async function loadFesFull() {
+  if (typeof loaded.fmpdf !== 'number') { toast('Chargez d\'abord la liste de Fès.'); $('abs').checked = false; return; }
+  fesFullState = 'loading'; $('absState').textContent = '(chargement…)';
+  try {
+    let text;
+    if (pickedFesFull) text = await pickedFesFull.text();
+    else if (location.protocol === 'file:') throw new Error('choisissez le dossier archive');
+    else text = await fetchText(FES_FULL.file);
+    const n = mergeFesFull(parseCSV(text));
+    fesMerged = true; fesFullState = 'on'; $('absState').textContent = `(${n.toLocaleString('fr-FR')})`;
+    run();
+  } catch (e) {
+    fesFullState = 'error'; $('absState').textContent = `(échec : ${e.message})`; $('abs').checked = false;
+  }
+}
+
+/* =====================================================================
+   5. Query parsing + matching
+   ===================================================================== */
+const FIELD_ALIASES = {
+  titre: 'title', title: 'title', t: 'title',
+  auteur: 'author', author: 'author', a: 'author', nom: 'author',
+  rapporteur: 'rapp', directeur: 'rapp', r: 'rapp', jury: 'rapp',
+  code: 'code', n: 'code',
+  resume: 'abs', abstract: 'abs', abs: 'abs',
+  annee: 'year', an: 'year', year: 'year', y: 'year',
+  fac: 'fac', faculte: 'fac', f: 'fac'
+};
+const FAC_ALIASES = {
+  fmpm: ['fmpm'], marrakech: ['fmpm'], mrk: ['fmpm'],
+  fmpr: ['fmprm', 'fmprp'], rabat: ['fmprm', 'fmprp'],
+  med: ['fmprm'], medecine: ['fmprm'], fmprm: ['fmprm'],
+  pharma: ['fmprp'], pharmacie: ['fmprp'], fmprp: ['fmprp'],
+  fes: ['fmpdf'], fmpdf: ['fmpdf'], fmpf: ['fmpdf'], fez: ['fmpdf']
+};
+
+function parseQuery(raw) {
+  const out = { terms: [], years: null, facs: null, bang: null, plain: [] };
+  const re = /(-?)(?:([a-zA-Zéè]+):)?(?:"([^"]*)"?|(\S+))/g;
+  let m;
+  while ((m = re.exec(raw))) {
+    const neg = m[1] === '-';
+    let key = m[2] ? norm(m[2]) : null;
+    const quoted = m[3] !== undefined;
+    let val = quoted ? m[3] : m[4];
+    if (val === undefined || !val.replace(/[-|]/g, '').trim()) continue;
+    if (!key && !quoted && /^[a-zA-Zéè]+:$/.test(val) && FIELD_ALIASES[norm(val.slice(0, -1))]) continue; // "auteur:" still being typed
+    if (!key && !quoted && val.startsWith('!') && val.length > 1) { out.bang = val.slice(1).toLowerCase(); continue; }
+    const field = key ? FIELD_ALIASES[key] : null;
+    if (key && !field) { val = m[0].replace(/^-/, ''); key = null; }   // "covid:19" → plain text
+    if (field === 'year') {
+      const v = val.replace(/\s/g, '');
+      let a = -Infinity, b = Infinity, mm;
+      if ((mm = v.match(/^(\d{4})-(\d{4})$/))) { a = +mm[1]; b = +mm[2]; }
+      else if ((mm = v.match(/^>=?(\d{4})$/))) { a = +mm[1] + (v[1] === '=' ? 0 : 1); }
+      else if ((mm = v.match(/^<=?(\d{4})$/))) { b = +mm[1] - (v[1] === '=' ? 0 : 1); }
+      else if ((mm = v.match(/^(\d{4})$/))) { a = b = +mm[1]; }
+      else continue;
+      out.years = [a, b]; continue;
+    }
+    if (field === 'fac') {
+      const ids = new Set();
+      norm(val).split('|').forEach(x => (FAC_ALIASES[x] || []).forEach(id => ids.add(id)));
+      if (ids.size) out.facs = ids;
+      continue;
+    }
+    const alts = norm(val).split('|').map(s => s.trim().replace(/\s+/g, ' ')).filter(Boolean);
+    if (!alts.length) continue;
+    out.terms.push({ neg, field, alts, phrase: quoted });
+    if (!neg && (!field || field === 'title')) out.plain.push(quoted ? `"${val}"` : val.replace(/\|/g, ' '));
+  }
+  return out;
+}
+
+function compileTerms(terms, wordStart) {
+  return terms.map(t => {
+    const src = t.alts.map(a => (wordStart ? '(?:^|[^a-z0-9])' : '') + reEsc(a)).join('|');
+    return { ...t, re: new RegExp(src), hl: t.alts };
+  });
+}
+
+const FIELD_SCORE = { nT: 10, nC: 8, nA: 6, nR: 3, nX: 2, nAbs: 1 };
+function fieldsFor(term, withAbs) {
+  switch (term.field) {
+    case 'title': return ['nT'];
+    case 'author': return ['nA'];
+    case 'rapp': return ['nR'];
+    case 'code': return ['nC'];
+    case 'abs': return ['nAbs'];
+    default: return withAbs ? ['nT', 'nA', 'nR', 'nC', 'nX', 'nAbs'] : ['nT', 'nA', 'nR', 'nC', 'nX'];
+  }
+}
+
+function search(state) {
+  const q = parseQuery(state.q);
+  const terms = compileTerms(q.terms, state.wordStart);
+  const withAbs = fesFullState === 'on';
+  let [y1, y2] = [state.y1 || -Infinity, state.y2 || Infinity];
+  if (q.years) { y1 = Math.max(y1, q.years[0]); y2 = Math.min(y2, q.years[1]); }
+  const facs = new Set([...state.facs].filter(f => !q.facs || q.facs.has(f)));
+  const phrase = q.terms.filter(t => !t.neg && !t.field).map(t => t.alts[0]).join(' ');
+  const hits = [];
+  const facCounts = Object.fromEntries(SOURCES.map(s => [s.id, 0])); // ignores the faculty filter, so chips show what you'd get
+  outer:
+  for (const r of DB) {
+    if (r.year && (r.year < y1 || r.year > y2)) continue;
+    if (state.hideNs && r.ns) continue;
+    let score = 0;
+    for (const t of terms) {
+      let hit = false;
+      for (const f of fieldsFor(t, withAbs)) {
+        if (r[f] && t.re.test(r[f])) { hit = true; score += FIELD_SCORE[f]; if (!t.neg) break; }
+      }
+      if (hit === t.neg) continue outer;
+    }
+    facCounts[r.src]++;
+    if (!facs.has(r.src)) continue;
+    if (phrase.length > 3 && r.nT.includes(phrase)) score += 15;
+    r._score = score;
+    hits.push(r);
+  }
+  if (state.sort === 'new') hits.sort((a, b) => b.year - a.year || (+b.num || 0) - (+a.num || 0));
+  else if (state.sort === 'old') hits.sort((a, b) => a.year - b.year || (+a.num || 0) - (+b.num || 0));
+  else hits.sort((a, b) => b._score - a._score || b.year - a.year);
+  return { hits, terms, q, facCounts };
+}
+
+/* =====================================================================
+   6. Highlighting — map normalized offsets back to the original string
+   ===================================================================== */
+function highlight(orig, terms) {
+  const pos = terms.filter(t => !t.neg);
+  if (!orig || !pos.length) return esc(orig);
+  let n = ''; const map = [];
+  for (let i = 0; i < orig.length; i++) {
+    const piece = norm(orig[i]);
+    for (let k = 0; k < piece.length; k++) { n += piece[k]; map.push(i); }
+  }
+  map.push(orig.length);
+  const marks = new Uint8Array(orig.length);
+  for (const t of pos) for (const a of t.hl) {
+    if (!a) continue;
+    let from = 0, idx;
+    while ((idx = n.indexOf(a, from)) !== -1) {
+      const s = map[idx], e = map[idx + a.length] ?? orig.length;
+      for (let j = s; j < e; j++) marks[j] = 1;
+      from = idx + 1;
+    }
+  }
+  let html = '', open = false;
+  for (let i = 0; i < orig.length; i++) {
+    if (marks[i] && !open) { html += '<mark>'; open = true; }
+    if (!marks[i] && open) { html += '</mark>'; open = false; }
+    html += esc(orig[i]);
+  }
+  return html + (open ? '</mark>' : '');
+}
+
+/* =====================================================================
+   7. UI state, rendering
+   ===================================================================== */
+const PAGE = 50;
+let state = { q: '', facs: new Set(SOURCES.map(s => s.id)), y1: 0, y2: 0, sort: 'rel', wordStart: true, hideNs: false };
+let last = { hits: [], terms: [], q: null };
+let shownCount = PAGE;
+let yearPin = null;           // year clicked in the chart
+
+function buildChips() {
+  $('facChips').innerHTML = SOURCES.map(s => {
+    const off = typeof loaded[s.id] !== 'number';
+    return `<label class="chip" title="${esc(s.long)}">
+      <input type="checkbox" value="${s.id}" ${state.facs.has(s.id) ? 'checked' : ''} ${off ? 'disabled' : ''}>
+      <span class="dot" style="background:var(--fac-${s.id})"></span>${esc(s.label)}
+      <span class="count" data-count="${s.id}"></span></label>`;
+  }).join('');
+  $('facChips').querySelectorAll('input').forEach(cb => cb.addEventListener('change', () => {
+    cb.checked ? state.facs.add(cb.value) : state.facs.delete(cb.value); run();
+  }));
+}
+
+function run() {
+  if (!DB.length) return;
+  const t0 = performance.now();
+  const st = { ...state };
+  if (yearPin) { st.y1 = yearPin; st.y2 = yearPin; }
+  last = search(st);
+  const ms = performance.now() - t0;
+  shownCount = PAGE;
+  for (const s of SOURCES) {
+    const el = document.querySelector(`[data-count="${s.id}"]`);
+    if (el) el.textContent = last.facCounts[s.id].toLocaleString('fr-FR');
+  }
+  const total = last.hits.length;
+  $('total').textContent = total.toLocaleString('fr-FR');
+  $('totalLbl').textContent = (total > 1 ? 'thèses' : 'thèse') + (yearPin ? ` en ${yearPin}` : '') + (state.q.trim() ? ` pour « ${state.q.trim()} »` : ' au total');
+  $('timing').textContent = `${ms < 1 ? '<1' : Math.round(ms)} ms`;
+  renderChart();
+  renderResults();
+  renderExternal();
+  writeHash();
+  // A bare !bang typed with no other words is a request to go, handled on submit.
+}
+
+function renderChart() {
+  // Chart ignores the year pin so the user can see and change it.
+  const st = { ...state };
+  const res = yearPin ? search(st) : last;
+  const by = new Map();
+  for (const r of res.hits) {
+    if (!r.year) continue;
+    let e = by.get(r.year); if (!e) by.set(r.year, e = { total: 0 });
+    e.total++; e[r.src] = (e[r.src] || 0) + 1;
+  }
+  const bars = $('bars'), axis = $('axis');
+  if (!by.size) { bars.innerHTML = ''; axis.innerHTML = ''; $('chart').hidden = true; return; }
+  $('chart').hidden = false;
+  const years = [...by.keys()];
+  const y0 = Math.min(...years), y1 = Math.max(...years);
+  const max = Math.max(...[...by.values()].map(e => e.total));
+  let html = '';
+  for (let y = y0; y <= y1; y++) {
+    const e = by.get(y) || { total: 0 };
+    const h = e.total ? Math.max(3, Math.round(e.total / max * 100)) : 0;
+    html += `<div class="bar-slot${yearPin === y ? ' on' : ''}" role="listitem" data-year="${y}" tabindex="0"
+      aria-label="${y} : ${e.total} thèse(s)"><div class="bar" style="height:${h}%"></div></div>`;
+  }
+  bars.innerHTML = html;
+  const span = y1 - y0;
+  const ticks = [y0];
+  if (span >= 8) { const step = span > 40 ? 10 : 5; for (let y = Math.ceil((y0 + 1) / step) * step; y < y1 - step / 2; y += step) ticks.push(y); }
+  if (y1 !== y0) ticks.push(y1);
+  axis.innerHTML = ticks.map(t => `<span>${t}</span>`).join('');
+  bars._by = by;
+  $('chartTitle').textContent = yearPin
+    ? `Thèses par année — filtré sur ${yearPin} (recliquez pour retirer)`
+    : `Thèses par année (${y0}–${y1}) — cliquez une barre pour filtrer l'année`;
+}
+
+function showTip(slot) {
+  const by = $('bars')._by; if (!by) return;
+  const y = +slot.dataset.year, e = by.get(y) || { total: 0 };
+  const tip = $('tip');
+  tip.innerHTML = `<b>${y}</b> · ${e.total} thèse${e.total > 1 ? 's' : ''}` +
+    SOURCES.filter(s => e[s.id]).map(s => `<div class="row"><span class="dot" style="background:var(--fac-${s.id})"></span>${esc(s.label)} : ${e[s.id]}</div>`).join('');
+  tip.style.display = 'block';
+  const chart = $('chart').getBoundingClientRect(), r = slot.getBoundingClientRect();
+  let left = r.left - chart.left + r.width / 2 - tip.offsetWidth / 2;
+  left = Math.max(0, Math.min(left, chart.width - tip.offsetWidth));
+  tip.style.left = left + 'px';
+  const barTop = slot.firstElementChild.getBoundingClientRect().top;
+  tip.style.top = Math.max(0, Math.min(barTop, r.bottom - 20) - chart.top - tip.offsetHeight - 6) + 'px';
+}
+
+function renderResults() {
+  const list = $('results');
+  const { hits, terms } = last;
+  if (!hits.length) {
+    list.innerHTML = `<li class="empty">Aucune thèse trouvée dans les listes locales.
+      ${state.q.trim() ? 'Essayez sans accents, un mot plus court, ou les sources externes ci-dessous (Toubkal couvre aussi Casablanca).' : ''}</li>`;
+    $('moreBtn').hidden = true; $('shown').textContent = '';
+    if (state.q.trim()) $('ext').open = true;
+    return;
+  }
+  const slice = hits.slice(0, shownCount);
+  list.innerHTML = slice.map((r, i) => renderRow(r, i, terms)).join('');
+  $('moreBtn').hidden = hits.length <= shownCount;
+  $('moreBtn').textContent = `Afficher plus (${Math.min(PAGE * 2, hits.length - shownCount)} sur ${(hits.length - shownCount).toLocaleString('fr-FR')} restantes)`;
+  $('shown').textContent = `${slice.length.toLocaleString('fr-FR')} affichées sur ${hits.length.toLocaleString('fr-FR')}`;
+}
+
+function renderRow(r, i, terms) {
+  const s = SRC[r.src];
+  const toubkalQ = `https://toubkal.imist.ma/search?query=${enc(r.title.slice(0, 120))}&submit=OK`;
+  const googleQ = `https://www.google.com/search?q=${enc('"' + r.title.slice(0, 100) + '"')}`;
+  const links = [];
+  if (r.pdf) links.push(`<a href="${esc(r.pdf)}" target="_blank" rel="noopener noreferrer">📄 Texte intégral${/\.rar$/i.test(r.pdf) ? ' (.rar)' : ''}</a>`);
+  if (r.article) links.push(`<a href="${esc(r.article)}" target="_blank" rel="noopener noreferrer">📝 Article résumé</a>`);
+  if (r.srcList) links.push(`<a href="${esc(r.srcList)}" target="_blank" rel="noopener noreferrer" title="Liste officielle de l'année où figure la thèse">📋 Liste source</a>`);
+  links.push(`<a href="${toubkalQ}" target="_blank" rel="noopener noreferrer">Toubkal</a>`);
+  links.push(`<a href="${googleQ}" target="_blank" rel="noopener noreferrer">Google</a>`);
+  if (r.abstract) links.push(`<button type="button" data-abs="${i}" aria-expanded="false">▸ Résumé</button>`);
+  links.push(`<button type="button" data-cite="${i}" title="Référence Vancouver (thèse)">📑 Copier la référence</button>`);
+  const absHit = r.abstract && terms.some(t => !t.neg && (t.field === 'abs' || !t.field) && t.re.test(r.nAbs) && !t.re.test(r.nT));
+  return `<li class="res">
+    <div class="res-meta">
+      <span class="fac"><span class="dot" style="background:var(--fac-${r.src})"></span>${esc(s.label)}</span>
+      <span>${r.year || 'année ?'}</span>
+      ${r.num ? `<span>n° ${esc(r.num)}</span>` : ''}
+      ${r.code ? `<span>${highlight(r.code, terms)}</span>` : ''}
+      ${r.theme ? `<span>${esc(r.theme)}</span>` : ''}
+      ${r.note ? `<span class="tag">${esc(r.note)}</span>` : ''}
+      ${absHit ? '<span class="tag" style="background:var(--accent-soft);color:var(--accent)">trouvé dans le résumé</span>' : ''}
+    </div>
+    <div class="res-title">${r.title ? highlight(r.title, terms) : '<em>(titre absent de la source)</em>'}</div>
+    <div class="res-people">${r.author ? highlight(r.author, terms) : '<em>auteur absent</em>'}${r.rapp ? ` <span class="lbl">· rapporteur</span> ${highlight(r.rapp, terms)}` : ''}</div>
+    <div class="res-links">${links.join('')}</div>
+    <div class="abstract" data-abs-body="${i}" hidden></div>
+  </li>`;
+}
+
+function citation(r) {
+  const s = SRC[r.src];
+  const kind = s.filiere === 'Pharmacie' ? 'Thèse de doctorat en pharmacie' : 'Thèse de doctorat en médecine';
+  const title = r.title.replace(/\s*[.…]+\s*$/, '');
+  return `${r.author}. ${title} [${kind}]. ${s.city} : ${s.fullName} ; ${r.year || 's.d.'}.${r.num ? ` N° ${r.num}.` : ''}${r.pdf ? ` Disponible sur : ${r.pdf}` : ''}`;
+}
+
+function renderExternal() {
+  const q = last.q ? last.q.plain.join(' ') : '';
+  $('extBody').innerHTML = EXTERNAL.map(g => `<div class="ext-group"><h3>${esc(g.group)}</h3><ul>${
+    g.items.map((it, k) => `<li><button type="button" class="link" data-ext="${esc(g.group)}|${k}">
+      <span>${esc(it.name)}</span><span class="kind">${it.link ? 'lien' : it.paste ? 'requête à coller' : (q ? 'avec la requête' : 'ouvrir')}${it.bang ? ` · !${it.bang}` : ''}</span></button></li>`).join('')
+  }</ul></div>`).join('') +
+  `<p class="ext-note">« avec la requête » ouvre la source avec vos mots (sans les filtres <code>auteur:</code>, <code>annee:</code>…). « requête à coller » : le site n'accepte pas de requête dans l'adresse, la requête est copiée, collez-la dans sa barre de recherche.</p>`;
+}
+
+async function goExternal(it, q) {
+  if (it.paste && q) { await copyText(q); toast(`Requête copiée : « ${q} » — collez-la dans la page.`); }
+  openExternal(it.link || it.paste ? it.url() : it.url(q));
+}
+
+/* =====================================================================
+   8. URL hash (shareable / bookmarkable searches)
+   ===================================================================== */
+function writeHash() {
+  const p = new URLSearchParams();
+  if (state.q) p.set('q', state.q);
+  if (state.facs.size !== SOURCES.length) p.set('fac', [...state.facs].join(','));
+  if (state.y1) p.set('y1', state.y1);
+  if (state.y2) p.set('y2', state.y2);
+  if (yearPin) p.set('an', yearPin);
+  if (state.sort !== 'rel') p.set('tri', state.sort);
+  if (!state.wordStart) p.set('mot', '0');
+  if (state.hideNs) p.set('sout', '1');
+  if ($('abs').checked) p.set('res', '1');
+  const h = p.toString();
+  history.replaceState(null, '', h ? '#' + h : location.pathname + location.search);
+}
+function readHash() {
+  const p = new URLSearchParams(location.hash.slice(1));
+  state.q = p.get('q') || '';
+  state.facs = p.get('fac') ? new Set(p.get('fac').split(',').filter(id => SRC[id])) : new Set(SOURCES.map(s => s.id));
+  state.y1 = +p.get('y1') || 0; state.y2 = +p.get('y2') || 0;
+  yearPin = +p.get('an') || null;
+  state.sort = ['rel', 'new', 'old'].includes(p.get('tri')) ? p.get('tri') : 'rel';
+  state.wordStart = p.get('mot') !== '0';
+  state.hideNs = p.get('sout') === '1';
+  $('q').value = state.q; $('y1').value = state.y1 || ''; $('y2').value = state.y2 || '';
+  $('sort').value = state.sort; $('wordStart').checked = state.wordStart; $('hideNs').checked = state.hideNs;
+  $('abs').checked = p.get('res') === '1';
+}
+
+function exportCsv() {
+  const cols = ['Faculté', 'Filière', 'Année', 'N°', 'Code', 'Auteur', 'Titre', 'Rapporteur', 'Remarque', 'Texte intégral', 'Liste source'];
+  const q = v => /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+  const lines = [cols.join(',')].concat(last.hits.map(r => [SRC[r.src].long, SRC[r.src].filiere, r.year || '', r.num, r.code, r.author, r.title, r.rapp, r.note, r.pdf, r.srcList].map(v => q(String(v ?? ''))).join(',')));
+  const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `theses-recherche-${(state.q.trim() || 'tout').replace(/[^\p{L}\p{N}]+/gu, '-').slice(0, 40)}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+/* =====================================================================
+   9. Wiring
+   ===================================================================== */
+let debounce;
+$('q').addEventListener('input', () => {
+  clearTimeout(debounce);
+  debounce = setTimeout(() => { state.q = $('q').value; yearPin = null; run(); }, 140);
+});
+$('searchForm').addEventListener('submit', e => {
+  e.preventDefault();
+  state.q = $('q').value;
+  const pq = parseQuery(state.q);
+  if (pq.bang) {
+    const it = BANGS[pq.bang];
+    if (it) { goExternal(it, pq.plain.join(' ')); return; }
+    toast(`Bang inconnu : !${pq.bang} — connus : ${Object.keys(BANGS).map(b => '!' + b).join(' ')}`);
+  }
+  clearTimeout(debounce); run();
+});
+['y1', 'y2'].forEach(id => $(id).addEventListener('change', () => { state[id] = +$(id).value || 0; yearPin = null; run(); }));
+$('sort').addEventListener('change', () => { state.sort = $('sort').value; run(); });
+$('wordStart').addEventListener('change', () => { state.wordStart = $('wordStart').checked; run(); });
+$('hideNs').addEventListener('change', () => { state.hideNs = $('hideNs').checked; run(); });
+$('abs').addEventListener('change', () => {
+  if ($('abs').checked) {
+    if (fesMerged) { fesFullState = 'on'; run(); }
+    else if (fesFullState !== 'loading') loadFesFull();
+  } else if (fesFullState === 'on') { fesFullState = 'off'; run(); }
+});
+$('moreBtn').addEventListener('click', () => { shownCount += PAGE * 2; renderResults(); });
+$('exportCsv').addEventListener('click', () => { if (last.hits.length) exportCsv(); else toast('Rien à exporter.'); });
+$('copyLink').addEventListener('click', async () => {
+  if (location.protocol === 'file:') toast('Lien local (file://) : utile seulement sur cet appareil.');
+  if (await copyText(location.href)) toast('Lien de la recherche copié.');
+});
+$('helpBtn').addEventListener('click', () => {
+  const h = $('hint'); h.hidden = !h.hidden; $('helpBtn').setAttribute('aria-expanded', String(!h.hidden));
+});
+
+// Theme toggle: data-theme on <html> overrides the OS setting; remembered per browser.
+function applyTheme(t) { if (t) document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme; }
+applyTheme(lsGet('thesis-archive-theme'));
+$('themeBtn').addEventListener('click', () => {
+  const dark = document.documentElement.dataset.theme
+    ? document.documentElement.dataset.theme === 'dark'
+    : matchMedia('(prefers-color-scheme: dark)').matches;
+  const next = dark ? 'light' : 'dark';
+  applyTheme(next); lsSet('thesis-archive-theme', next);
+});
+
+// Results: abstract toggle + citation copy (event delegation).
+$('results').addEventListener('click', async e => {
+  const absBtn = e.target.closest('[data-abs]');
+  if (absBtn) {
+    const i = +absBtn.dataset.abs, body = document.querySelector(`[data-abs-body="${i}"]`);
+    const open = body.hidden;
+    if (open && !body.innerHTML) body.innerHTML = highlight(last.hits[i].abstract, last.terms);
+    body.hidden = !open; absBtn.textContent = open ? '▾ Résumé' : '▸ Résumé'; absBtn.setAttribute('aria-expanded', String(open));
+    return;
+  }
+  const citeBtn = e.target.closest('[data-cite]');
+  if (citeBtn && await copyText(citation(last.hits[+citeBtn.dataset.cite]))) toast('Référence copiée (à vérifier : casse et ponctuation).');
+});
+
+// External sources.
+$('extBody').addEventListener('click', e => {
+  const b = e.target.closest('[data-ext]'); if (!b) return;
+  const [g, k] = b.dataset.ext.split('|');
+  const it = EXTERNAL.find(x => x.group === g).items[+k];
+  goExternal(it, last.q ? last.q.plain.join(' ') : '');
+});
+
+// Chart hover + click-to-filter.
+const barsEl = $('bars');
+barsEl.addEventListener('mouseover', e => { const s = e.target.closest('.bar-slot'); if (s) showTip(s); });
+barsEl.addEventListener('mouseleave', () => { $('tip').style.display = 'none'; });
+barsEl.addEventListener('focusin', e => { const s = e.target.closest('.bar-slot'); if (s) showTip(s); });
+barsEl.addEventListener('focusout', () => { $('tip').style.display = 'none'; });
+function pinYear(slot) { const y = +slot.dataset.year; yearPin = yearPin === y ? null : y; $('tip').style.display = 'none'; run(); }
+barsEl.addEventListener('click', e => { const s = e.target.closest('.bar-slot'); if (s) pinYear(s); });
+barsEl.addEventListener('keydown', e => { const s = e.target.closest('.bar-slot'); if (s && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); pinYear(s); } });
+
+// Keyboard: "/" focuses search, Esc clears.
+document.addEventListener('keydown', e => {
+  if (e.key === '/' && document.activeElement !== $('q') && !/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) { e.preventDefault(); $('q').focus(); $('q').select(); }
+  if (e.key === 'Escape' && document.activeElement === $('q') && $('q').value) { $('q').value = ''; state.q = ''; yearPin = null; run(); }
+});
+window.addEventListener('hashchange', () => { readHash(); run(); });
+
+readHash();
+renderExternal();
+loadAll();
+</script>
+</body>
+</html>
