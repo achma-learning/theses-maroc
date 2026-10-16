@@ -209,6 +209,44 @@
     }
     .btn.ghost { background: transparent; color: var(--accent); }
     .empty { color: var(--text-muted); padding: 20px 4px; text-align: center; }
+    /* Pivot = a name / keyword / specialty you can click to search it (These2.0's best idea). */
+    button.pivot {
+      background: none; border: 0; padding: 0; margin: 0; cursor: pointer; color: inherit; font: inherit; text-align: left;
+      text-decoration: underline dotted var(--text-muted); text-underline-offset: 3px;
+    }
+    button.pivot:hover { color: var(--accent); text-decoration-color: var(--accent); }
+    .res-kw { display: flex; flex-wrap: wrap; gap: 4px 6px; font-family: var(--text-font); font-size: .78rem; }
+    .kw { border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px; background: var(--panel); color: var(--text-secondary); text-decoration: none; }
+    .kw:hover { border-color: var(--accent); color: var(--accent); }
+    .kw.cat { background: var(--accent-soft); border-color: transparent; color: var(--accent); }
+    .unoff { font-family: var(--ui-font); font-size: .65rem; color: var(--text-muted); }
+
+    /* ---------- Facets (refine the current results) ---------- */
+    .facet-body { padding: 0 14px 14px; display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; }
+    .facet h3 { margin: 0 0 6px; font-size: .78rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .04em; }
+    .facet ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+    .facet button {
+      width: 100%; display: flex; justify-content: space-between; gap: 8px; text-align: left; cursor: pointer;
+      background: none; border: 0; border-radius: 6px; padding: 3px 6px; font-size: .8rem;
+    }
+    .facet button:hover { background: var(--card); color: var(--accent); }
+    .facet .n { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+    .facet .none { color: var(--text-muted); font-size: .75rem; }
+
+    /* ---------- Fiche (one thesis, own permalink) ---------- */
+    dialog#fiche {
+      width: min(760px, calc(100vw - 24px)); max-height: calc(100vh - 32px); border: 1px solid var(--border); border-radius: 14px;
+      background: var(--card); color: var(--text-primary); padding: 0; box-shadow: 0 16px 48px rgba(0,0,0,.45);
+    }
+    dialog#fiche::backdrop { background: rgba(0, 0, 20, .55); }
+    .fiche-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 14px 18px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--card); }
+    .fiche-body { padding: 16px 18px 20px; display: flex; flex-direction: column; gap: 14px; }
+    .fiche-body h2 { margin: 0; font-family: var(--text-font); font-size: 1.1rem; line-height: 1.4; }
+    .fiche-body dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; font-family: var(--text-font); font-size: .88rem; }
+    .fiche-body dt { color: var(--text-muted); font-family: var(--ui-font); font-size: .74rem; padding-top: 2px; }
+    .fiche-body dd { margin: 0; overflow-wrap: anywhere; }
+    .fiche-body .sep { color: var(--text-muted); }
+    @media (max-width: 600px) { .fiche-body dl { grid-template-columns: 1fr; } .fiche-body dd { margin-bottom: 6px; } }
 
     /* ---------- External sources ---------- */
     details.ext { border: 1px solid var(--border); border-radius: 12px; background: var(--panel); }
@@ -262,10 +300,11 @@
     <p class="hint" id="hint" hidden>
       Sans accents ni majuscules : <code>diabete</code> trouve « DIABÈTE ». Tous les mots doivent être présents.
       <code>"pied bot"</code> expression exacte · <code>-enfant</code> exclure · <code>lupus|les</code> l'un ou l'autre ·
-      <code>titre:</code> <code>auteur:</code> <code>rapporteur:</code> <code>code:</code> <code>resume:</code> cibler un champ ·
+      <code>titre:</code> <code>auteur:</code> <code>rapporteur:</code> <code>jury:</code> <code>motcle:</code> <code>cat:</code> <code>code:</code> <code>resume:</code> cibler un champ · <code>langue:en</code> ·
       <code>annee:2020</code> <code>annee:2015-2020</code> <code>annee:&gt;2018</code> · <code>fac:fes</code> (<code>fmpm</code>, <code>fmpr</code>, <code>med</code>, <code>pharma</code>, <code>fes</code>).
       Bangs (comme searchAIO, ouvrent la source externe avec Entrée) : <code>!toubkal</code> <code>!t2</code> <code>!opac</code> <code>!gfmpm</code> <code>!gfes</code> <code>!these</code> <code>!cismef</code>.
-      Raccourcis : <code>/</code> rechercher · <code>Échap</code> effacer.
+      Les noms, mots-clés et spécialités soulignés en pointillé se cliquent : ils lancent la recherche correspondante.
+      Raccourcis : <code>/</code> rechercher · <code>Échap</code> effacer (ou fermer la fiche).
     </p>
   </form>
 
@@ -277,11 +316,14 @@
         <option value="rel">pertinence</option>
         <option value="new">plus récentes</option>
         <option value="old">plus anciennes</option>
+        <option value="titre">titre A→Z</option>
+        <option value="auteur">auteur A→Z</option>
       </select>
     </label>
     <label class="ctl" title="« rein » ne trouve pas « freins » ; « diabet » trouve « diabétique »"><input type="checkbox" id="wordStart" checked> début de mot</label>
     <label class="ctl" title="Masquer les thèses non soutenues / reportées / lignes vides"><input type="checkbox" id="hideNs"> soutenues seulement</label>
-    <label class="ctl" hidden title="Charge le CSV complet de Fès (≈35 Mo) : rapporteur + résumé de 99 % des thèses"><input type="checkbox" id="abs"> résumés + rapporteurs Fès <span id="absState"></span></label>
+    <label class="ctl" hidden title="Charge le CSV complet de Fès (≈35 Mo) : rapporteur, spécialité + résumé de 99 % des thèses"><input type="checkbox" id="abs"> résumés + rapporteurs Fès <span id="absState"></span></label>
+    <label class="ctl" id="t2Ctl" hidden title="Président, rapporteur, jury, mots-clés, spécialité et langue de ≈3 200 thèses FMPM 2006-2024, recopiés de These2.0 (site d'un étudiant, non officiel)"><input type="checkbox" id="t2" checked> jury + mots-clés FMPM <span class="unoff">(These2.0, non officiel)</span> <span id="t2State"></span></label>
   </div>
 
   <div class="status" id="status" aria-live="polite">Chargement des listes…</div>
@@ -309,6 +351,11 @@
     </span>
   </div>
 
+  <details class="ext" id="facets" open>
+    <summary>🧭 Affiner — spécialités, rapporteurs / jury, mots-clés des résultats</summary>
+    <div class="facet-body" id="facetBody"></div>
+  </details>
+
   <ol class="results" id="results"></ol>
   <button class="btn more" id="moreBtn" type="button" hidden>Afficher plus</button>
 
@@ -320,9 +367,20 @@
   <footer>
     Données : <code>archive/**/theses-*.csv</code> de ce site (sources et limites : <a href="archive/sources-theses-maroc.md">archive/sources-theses-maroc.md</a>).
     Les listes de Rabat sont en MAJUSCULES et souvent sans accents ; la FMPM a 385 titres tronqués « … » et 2023 s'arrête au n° 261 ; Fès : liste complète 2007-2026, sans les résumés.
+    Jury et mots-clés des thèses FMPM 2006-2024 : lien « These2.0 » dans la fiche (site non officiel d'un étudiant).
     Vérifiez toujours un sujet sur <a href="https://toubkal.imist.ma/search" target="_blank" rel="noopener noreferrer">Toubkal</a> avant de le déposer.
   </footer>
 </div>
+<dialog id="fiche" aria-labelledby="ficheTitle">
+  <div class="fiche-head">
+    <span class="fac" id="ficheFac"></span>
+    <span style="display:flex;gap:8px">
+      <button class="icon-btn" type="button" id="ficheLink" title="Copier le lien de cette fiche">🔗 Lien</button>
+      <button class="icon-btn" type="button" id="ficheClose" title="Fermer (Échap)">✕</button>
+    </span>
+  </div>
+  <div class="fiche-body" id="ficheBody"></div>
+</dialog>
 <div class="toast" id="toast" role="status"></div>
 
 <script>
@@ -367,6 +425,10 @@ const SOURCES = [
 ];
 // Optional, heavy (≈35 MB): Fès abstracts + rapporteurs, merged into fmpdf rows by PDF link.
 const FES_FULL = { file: 'archive/fmpdf/theses-fmpf-2007-2026-complet.csv', match: /^theses-fmpf-\d{4}-\d{4}-complet\.csv$/ };
+// Optional, light (≈2 MB), on by default: FMPM jury / keywords / specialty / language copied from
+// These2.0 (unofficial student site, archive/fmpm/methode/scrape_these2.py). Joined to fmpm rows
+// by year + N°, only when title or author agree. Never overwrites an official field.
+const T2_FMPM = { file: null /* not published in this public mirror */, match: /^these2-fmpm-\d{4}-\d{4}\.csv$/ };
 
 /* =====================================================================
    2. EXTERNAL SOURCES — mirrors archive/sources-theses-maroc.md (the source
@@ -427,6 +489,20 @@ function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 const reEsc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+// Person name → search/grouping key: drops titles (Pr, Dr…), "co-directeur", initials ("SEKHSOKH.Y" →
+// "sekhsokh", "Pr . A. BELBACHIR" → "belbachir"). Also used to split Rabat's "J: A;B*" multi-name cells.
+const NAME_SPLIT = /\s*(?:[;*]|\b[JP]\s*:)\s*/i;
+const NAME_DROP = /\b(?:co[- ]?(?:directeur|rapporteur|encadrant)(?:\s+de\s+th[eè]se)?|encadrant|pr|prof|professeur|dr|docteur|mr|mme|mlle)\b\.?/gi;
+function nameKey(s) {
+  return norm(s).replace(NAME_DROP, ' ').replace(/[.,:'()-]/g, ' ').split(/\s+/).filter(w => w.length > 1).join(' ');
+}
+function splitNames(s) { return (s || '').split(NAME_SPLIT).map(x => x.trim()).filter(x => nameKey(x)); }
+// Lists write "NOM Prénom" or "Prénom NOM": group on the sorted words, search every rotation.
+const personGroup = s => nameKey(s).split(' ').sort().join(' ');
+function personQuery(s) {
+  const w = nameKey(s).split(' ');
+  return `jury:"${w.map((_, k) => [...w.slice(k), ...w.slice(0, k)].join(' ')).join('|')}"`;
+}
 function lsGet(k) { try { return localStorage.getItem(k); } catch (_) { return null; } }
 function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (_) { /* private mode */ } }
 let toastTimer;
@@ -477,23 +553,78 @@ const loaded = {};            // source id → row count | Error
 const SRC = Object.fromEntries(SOURCES.map(s => [s.id, s]));
 let fesFullState = 'off';     // off | loading | on | error
 let fesMerged = false;        // abstracts already merged into DB (toggle off/on must not re-download 35 MB)
+let t2State = 'off';          // off | on | absent | error — These2.0 layer
+let t2Count = 0;              // fmpm rows that received These2.0 fields
+const BY_ID = new Map();      // fiche id ("fmpm-2024-5") → record, for permalinks
 
 function addRecords(src, rows) {
-  for (let k = DB.length - 1; k >= 0; k--) if (DB[k].src === src.id) DB.splice(k, 1); // idempotent reload
+  for (let k = DB.length - 1; k >= 0; k--) if (DB[k].src === src.id) { BY_ID.delete(DB[k].id); DB.splice(k, 1); } // idempotent reload
   for (const r of rows) {
     const m = src.map(r);
     if (!m.title && !m.author && !m.code && !m.note) continue;   // truly blank line; rows with only a code stay (they are in the official count)
     const rec = {
       src: src.id, year: parseInt(m.year, 10) || 0, num: m.num || '', code: m.code || '',
       author: m.author || '', title: m.title || '', rapp: m.rapp || '', note: m.note || '',
-      theme: m.theme || '', pdf: m.pdf || '', article: m.article || '', srcList: m.srcList || '', abstract: ''
+      theme: m.theme || '', pdf: m.pdf || '', article: m.article || '', srcList: m.srcList || '', abstract: '',
+      spec: '', t2: null
     };
     rec.ns = /non soutenue|reporter|ligne vide/i.test(rec.note);
     rec.nT = norm(rec.title); rec.nA = norm(rec.author); rec.nR = norm(rec.rapp);
     rec.nC = norm(rec.code); rec.nX = norm(rec.theme + ' ' + rec.note); rec.nAbs = '';
+    let id = `${src.id}-${rec.year}-${norm(rec.num || rec.code || 'x').replace(/[^a-z0-9-]+/g, '')}`, k = 2;
+    while (BY_ID.has(id + (k > 2 ? '~' + (k - 1) : ''))) k++;
+    rec.id = id + (k > 2 ? '~' + (k - 1) : '');
+    BY_ID.set(rec.id, rec);
+    setDerived(rec);
     DB.push(rec);
   }
   loaded[src.id] = rows.length;
+}
+
+// Fields that depend on the optional layers (These2.0 for FMPM, Fès -complet for spécialité).
+// Recomputed when a layer is toggled, so search, facets, fiche and export all read plain rec fields.
+function setDerived(rec) {
+  const t = t2State === 'on' ? rec.t2 : null;
+  rec.pres = t ? t.pres : '';
+  rec.jury = t ? t.jury : '';
+  rec.kw = t ? t.kw : '';
+  rec.lang = t ? t.lang : '';
+  rec.t2title = t ? t.title : '';
+  if (rec.src === 'fmpm') { rec.rapp = t ? t.rapp : ''; rec.nR = norm(rec.rapp); }
+  rec.cat = t ? t.cat : (rec.spec || rec.theme);
+  rec.nJ = norm([rec.pres, rec.jury].join(' ; '));
+  rec.nK = norm(rec.kw);
+  rec.nS = norm(rec.cat);
+  rec.nL = norm(rec.lang);
+  // Full title from These2.0 is searched only where the official one is truncated (« … »).
+  rec.nT2 = t && /…|\.\.\.\s*$/.test(rec.title) ? norm(t.title) : '';
+  // Pre-split for facets: [key, label] per person, list of keywords.
+  rec.people = [...splitNames(rec.rapp), ...splitNames(rec.pres), ...splitNames(rec.jury)].map(n => [personGroup(n), n]);
+  rec.kws = rec.kw ? rec.kw.split(' ; ').filter(Boolean) : [];
+}
+
+function mergeT2(rows) {
+  const byKey = new Map(DB.filter(r => r.src === 'fmpm').map(r => [`${r.year}-${+r.num}`, r]));
+  const prefix = s => norm(s).replace(/[^a-z0-9]/g, '').slice(0, 18);
+  const words = s => new Set(norm(s).split(/[^a-z]+/).filter(w => w.length > 2));
+  let n = 0;
+  for (const r of rows) {
+    const rec = byKey.get(`${+r['Année']}-${+r['N°']}`);
+    if (!rec) continue;
+    const t = r['Titre (These2.0)'] || '', a = r['Auteur (These2.0)'] || '';
+    const aw = words(a);
+    const sameTitle = t && rec.title && (prefix(t) === prefix(rec.title) || prefix(rec.title).startsWith(prefix(t)));
+    const sameAuthor = [...words(rec.author)].some(w => aw.has(w));
+    if (!sameTitle && !sameAuthor) continue;             // year + N° clash with a different thesis: skip
+    const cat = (r['Catégorie'] || '').split(' > ').pop();
+    rec.t2 = {
+      id: r['Identifiant These2.0'], title: t, lang: r['Langue'] || '',
+      cat: /not classed|not available/i.test(cat) ? '' : cat, catPath: r['Catégorie'] || '',
+      pres: r['Président'] || '', rapp: r['Rapporteur'] || '', jury: r['Jury'] || '', kw: r['Mots-clés'] || ''
+    };
+    n++;
+  }
+  return n;
 }
 
 function mergeFesFull(rows) {
@@ -507,6 +638,7 @@ function mergeFesFull(rows) {
     if (r['Code']) { rec.code = r['Code']; rec.nC = norm(rec.code); }
     const ctl = r['Contrôle'];
     if (ctl && ctl !== 'OK') { rec.note = ctl; rec.nX = norm(ctl); }
+    rec.spec = r['Spécialité'] || ''; setDerived(rec);
     n++;
   }
   return n;
@@ -520,11 +652,26 @@ async function fetchText(path) {
 
 async function loadAll() {
   const t0 = performance.now();
+  const t2 = T2_FMPM.file ? fetchText(T2_FMPM.file).then(parseCSV).catch(() => null) : null;   // in parallel; absent = fine
   await Promise.all(SOURCES.map(async s => {
     try { addRecords(s, parseCSV(await fetchText(s.file))); }
     catch (e) { loaded[s.id] = e; }
   }));
+  applyT2Rows(await t2);
   afterLoad(performance.now() - t0);
+}
+
+let t2Rows = null;
+function applyT2Rows(rows) {
+  if (rows) t2Rows = rows;
+  if (!t2Rows || typeof loaded.fmpm !== 'number') {
+    t2State = 'absent'; $('t2').checked = false; $('t2').disabled = true; $('t2State').textContent = '(fichier absent)'; return;
+  }
+  $('t2').disabled = false;
+  t2Count = mergeT2(t2Rows);
+  t2State = $('t2').checked ? 'on' : 'off';
+  DB.forEach(setDerived);
+  $('t2State').textContent = `(${t2Count.toLocaleString('fr-FR')})`;
 }
 
 function afterLoad(ms) {
@@ -534,6 +681,7 @@ function afterLoad(ms) {
   buildChips();
   if ($('abs').checked && !fesMerged && fesFullState !== 'loading') loadFesFull();
   run();
+  syncFiche();
 }
 
 function renderStatus(ms) {
@@ -543,6 +691,7 @@ function renderStatus(ms) {
     if (v instanceof Error) return `<span class="err">✘ ${esc(s.long)} (${esc(v.message)})</span>`;
     return `<span>… ${esc(s.long)}</span>`;
   });
+  if (t2Count) parts.push(`<span title="Couche non officielle, jointe par année + N°">＋ These2.0 : ${t2Count.toLocaleString('fr-FR')} fiches FMPM</span>`);
   if (ms) parts.push(`<span>chargé en ${(ms / 1000).toFixed(1)} s</span>`);
   $('status').innerHTML = parts.join('');
 }
@@ -576,6 +725,8 @@ async function loadFromFiles(fileList) {
   }
   pickedFesFull = files.find(f => FES_FULL.match.test(f.name)) || null;
   if (!SOURCES.some(s => typeof loaded[s.id] === 'number')) { toast('Aucun fichier theses-*.csv reconnu.'); return; }
+  const t2File = files.find(f => T2_FMPM.match.test(f.name));
+  applyT2Rows(t2File ? parseCSV(await t2File.text()) : null);
   afterLoad(performance.now() - t0);
 }
 
@@ -601,7 +752,11 @@ async function loadFesFull() {
 const FIELD_ALIASES = {
   titre: 'title', title: 'title', t: 'title',
   auteur: 'author', author: 'author', a: 'author', nom: 'author',
-  rapporteur: 'rapp', directeur: 'rapp', r: 'rapp', jury: 'rapp',
+  rapporteur: 'rapp', directeur: 'rapp', r: 'rapp',
+  jury: 'jury', j: 'jury', president: 'jury', prof: 'jury',
+  motcle: 'kw', motscles: 'kw', mc: 'kw', tag: 'kw', tags: 'kw', kw: 'kw',
+  cat: 'cat', categorie: 'cat', specialite: 'cat', spe: 'cat', theme: 'cat',
+  langue: 'lang', lang: 'lang', l: 'lang',
   code: 'code', n: 'code',
   resume: 'abs', abstract: 'abs', abs: 'abs',
   annee: 'year', an: 'year', year: 'year', y: 'year',
@@ -645,7 +800,8 @@ function parseQuery(raw) {
       if (ids.size) out.facs = ids;
       continue;
     }
-    const alts = norm(val).split('|').map(s => s.trim().replace(/\s+/g, ' ')).filter(Boolean);
+    let alts = norm(val).split('|').map(s => s.trim().replace(/\s+/g, ' ')).filter(Boolean);
+    if (field === 'lang') alts = alts.map(a => /^(en|eng|english|anglais|ang)$/.test(a) ? 'anglais' : /^(fr|fre|french|francais|fra)$/.test(a) ? 'francais' : a);
     if (!alts.length) continue;
     out.terms.push({ neg, field, alts, phrase: quoted });
     if (!neg && (!field || field === 'title')) out.plain.push(quoted ? `"${val}"` : val.replace(/\|/g, ' '));
@@ -660,15 +816,20 @@ function compileTerms(terms, wordStart) {
   });
 }
 
-const FIELD_SCORE = { nT: 10, nC: 8, nA: 6, nR: 3, nX: 2, nAbs: 1 };
+const FIELD_SCORE = { nT: 10, nT2: 8, nC: 8, nA: 6, nK: 4, nR: 3, nJ: 2, nS: 2, nX: 2, nL: 1, nAbs: 1 };
+const DEFAULT_FIELDS = ['nT', 'nT2', 'nA', 'nR', 'nJ', 'nK', 'nS', 'nC', 'nX'];
 function fieldsFor(term, withAbs) {
   switch (term.field) {
-    case 'title': return ['nT'];
+    case 'title': return ['nT', 'nT2'];
     case 'author': return ['nA'];
     case 'rapp': return ['nR'];
+    case 'jury': return ['nR', 'nJ'];
+    case 'kw': return ['nK'];
+    case 'cat': return ['nS'];
+    case 'lang': return ['nL'];
     case 'code': return ['nC'];
     case 'abs': return ['nAbs'];
-    default: return withAbs ? ['nT', 'nA', 'nR', 'nC', 'nX', 'nAbs'] : ['nT', 'nA', 'nR', 'nC', 'nX'];
+    default: return withAbs ? [...DEFAULT_FIELDS, 'nAbs'] : DEFAULT_FIELDS;
   }
 }
 
@@ -702,6 +863,8 @@ function search(state) {
   }
   if (state.sort === 'new') hits.sort((a, b) => b.year - a.year || (+b.num || 0) - (+a.num || 0));
   else if (state.sort === 'old') hits.sort((a, b) => a.year - b.year || (+a.num || 0) - (+b.num || 0));
+  else if (state.sort === 'titre') hits.sort((a, b) => (!a.nT - !b.nT) || (a.nT < b.nT ? -1 : a.nT > b.nT ? 1 : 0));
+  else if (state.sort === 'auteur') hits.sort((a, b) => (!a.nA - !b.nA) || (a.nA < b.nA ? -1 : a.nA > b.nA ? 1 : 0));
   else hits.sort((a, b) => b._score - a._score || b.year - a.year);
   return { hits, terms, q, facCounts };
 }
@@ -776,6 +939,7 @@ function run() {
   $('totalLbl').textContent = (total > 1 ? 'thèses' : 'thèse') + (yearPin ? ` en ${yearPin}` : '') + (state.q.trim() ? ` pour « ${state.q.trim()} »` : ' au total');
   $('timing').textContent = `${ms < 1 ? '<1' : Math.round(ms)} ms`;
   renderChart();
+  renderFacets();
   renderResults();
   renderExternal();
   writeHash();
@@ -849,11 +1013,22 @@ function renderResults() {
   $('shown').textContent = `${slice.length.toLocaleString('fr-FR')} affichées sur ${hits.length.toLocaleString('fr-FR')}`;
 }
 
+/* Pivots: every name, keyword and specialty is a search (These2.0 idea, here across all faculties). */
+const qv = s => norm(s).replace(/"/g, '').trim();
+function pivot(label, query, terms, cls = 'pivot') {
+  return `<button type="button" class="${cls}" data-q="${esc(query)}" title="Rechercher : ${esc(query)}">${terms ? highlight(label, terms) : esc(label)}</button>`;
+}
+const SEP = '<span class="sep"> · </span>';
+function people(s, terms) { return splitNames(s).map(n => pivot(n, personQuery(n), terms)).join(SEP); }
+function catPivot(r, cls) { return r.cat ? pivot(r.cat, `cat:"${qv(r.cat)}"`, null, cls) : ''; }
+function kwPivots(r, terms, max = Infinity) { return r.kws.slice(0, max).map(k => pivot(k, `motcle:"${qv(k)}"`, terms, 'kw')).join(''); }
+const fromT2 = r => !!(r.t2 && t2State === 'on');
+
 function renderRow(r, i, terms) {
   const s = SRC[r.src];
   const toubkalQ = `https://toubkal.imist.ma/search?query=${enc(r.title.slice(0, 120))}&submit=OK`;
   const googleQ = `https://www.google.com/search?q=${enc('"' + r.title.slice(0, 100) + '"')}`;
-  const links = [];
+  const links = [`<button type="button" data-fiche="${i}" title="Toutes les informations + lien direct vers cette thèse">🗂 Fiche</button>`];
   if (r.pdf) links.push(`<a href="${esc(r.pdf)}" target="_blank" rel="noopener noreferrer">📄 Texte intégral${/\.rar$/i.test(r.pdf) ? ' (.rar)' : ''}</a>`);
   if (r.article) links.push(`<a href="${esc(r.article)}" target="_blank" rel="noopener noreferrer">📝 Article résumé</a>`);
   if (r.srcList) links.push(`<a href="${esc(r.srcList)}" target="_blank" rel="noopener noreferrer" title="Liste officielle de l'année où figure la thèse">📋 Liste source</a>`);
@@ -873,7 +1048,8 @@ function renderRow(r, i, terms) {
       ${absHit ? '<span class="tag" style="background:var(--accent-soft);color:var(--accent)">trouvé dans le résumé</span>' : ''}
     </div>
     <div class="res-title">${r.title ? highlight(r.title, terms) : '<em>(titre absent de la source)</em>'}</div>
-    <div class="res-people">${r.author ? highlight(r.author, terms) : '<em>auteur absent</em>'}${r.rapp ? ` <span class="lbl">· rapporteur</span> ${highlight(r.rapp, terms)}` : ''}</div>
+    <div class="res-people">${r.author ? highlight(r.author, terms) : '<em>auteur absent</em>'}${r.rapp ? ` <span class="lbl">· rapporteur</span> ${people(r.rapp, terms)}` : ''}${r.pres ? ` <span class="lbl">· président</span> ${people(r.pres, terms)}` : ''}</div>
+    ${r.cat || r.kws.length ? `<div class="res-kw">${catPivot(r, 'kw cat')}${kwPivots(r, terms, 5)}${r.kws.length > 5 ? `<span class="unoff">+${r.kws.length - 5}</span>` : ''}${fromT2(r) ? '<span class="unoff" title="Rapporteur, président, spécialité et mots-clés recopiés de These2.0 (non officiel)">These2.0</span>' : ''}</div>` : ''}
     <div class="res-links">${links.join('')}</div>
     <div class="abstract" data-abs-body="${i}" hidden></div>
   </li>`;
@@ -884,6 +1060,96 @@ function citation(r) {
   const kind = s.filiere === 'Pharmacie' ? 'Thèse de doctorat en pharmacie' : 'Thèse de doctorat en médecine';
   const title = r.title.replace(/\s*[.…]+\s*$/, '');
   return `${r.author}. ${title} [${kind}]. ${s.city} : ${s.fullName} ; ${r.year || 's.d.'}.${r.num ? ` N° ${r.num}.` : ''}${r.pdf ? ` Disponible sur : ${r.pdf}` : ''}`;
+}
+
+/* Fiche: one thesis with every field, each name a pivot, and its own link (#fiche=fmpm-2024-5). */
+let ficheRec = null;
+let pendingFiche = null;      // fiche id read from the URL before the CSVs were loaded
+function openFiche(r) {
+  const s = SRC[r.src], terms = last.terms || [], un = fromT2(r) ? ' <span class="unoff">These2.0</span>' : '';
+  const row = (k, v) => v ? `<dt>${k}</dt><dd>${v}</dd>` : '';
+  const ext = (href, label) => `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+  const links = [];
+  if (r.pdf) links.push(ext(r.pdf, `📄 Texte intégral${/\.rar$/i.test(r.pdf) ? ' (.rar)' : ''}`));
+  if (r.article) links.push(ext(r.article, '📝 Article résumé'));
+  if (r.srcList) links.push(ext(r.srcList, '📋 Liste source'));
+  links.push(ext(`https://toubkal.imist.ma/search?query=${enc(r.title.slice(0, 120))}&submit=OK`, 'Toubkal'));
+  links.push(ext(`https://www.google.com/search?q=${enc('"' + r.title.slice(0, 100) + '"')}`, 'Google'));
+  // These2.0 ids are always "these" + 2-digit N° + "-" + YY (checked on all 3 219), so link even without the layer.
+  const t2Id = r.t2 ? r.t2.id : (r.src === 'fmpm' && r.year >= 2006 && (r.year < 2024 || (r.year === 2024 && +r.num <= 38)) && +r.num ? `these${String(+r.num).padStart(2, '0')}-${String(r.year).slice(2)}` : '');
+  if (t2Id) links.push(ext(`https://thesefmpm.vercel.app/these/${enc(t2Id)}`, r.t2 ? 'These2.0' : 'These2.0 (jury, mots-clés)'));
+  const fullTitle = r.t2title && /…|\.\.\.\s*$/.test(r.title) && norm(r.t2title) !== r.nT ? r.t2title : '';
+  $('ficheFac').innerHTML = `<span class="dot" style="background:var(--fac-${r.src})"></span>${esc(s.long)}`;
+  $('ficheBody').innerHTML = `
+    <h2 id="ficheTitle">${r.title ? highlight(r.title, terms) : '<em>(titre absent de la source)</em>'}</h2>
+    <dl>
+      ${row('Titre complet' + un, fullTitle && highlight(fullTitle, terms))}
+      ${row('Auteur', r.author && highlight(r.author, terms))}
+      ${row('Année', r.year && pivot(String(r.year), `fac:${r.src} annee:${r.year}`))}
+      ${row('N°', esc(r.num))}
+      ${row('Code', r.code && highlight(r.code, terms))}
+      ${row('Faculté', esc(`${s.fullName} — ${s.filiere}`))}
+      ${row('Spécialité' + (r.t2 && r.t2.cat && fromT2(r) ? un : ''), r.cat && (catPivot(r) + (fromT2(r) && r.t2.catPath ? ` <span class="unoff">${esc(r.t2.catPath)}</span>` : '')))}
+      ${row('Langue' + un, esc(r.lang))}
+      ${row('Président' + un, r.pres && people(r.pres, terms))}
+      ${row('Rapporteur' + (r.src === 'fmpm' ? un : ''), r.rapp && people(r.rapp, terms))}
+      ${row('Jury' + un, r.jury && people(r.jury, terms))}
+      ${row('Mots-clés' + un, r.kws.length && `<span class="res-kw">${kwPivots(r, terms)}</span>`)}
+      ${row('Thème', r.theme && r.theme !== r.cat ? esc(r.theme) : '')}
+      ${row('Remarque', r.note && `<span class="tag">${esc(r.note)}</span>`)}
+    </dl>
+    ${r.abstract ? `<div class="abstract">${highlight(r.abstract, terms)}</div>` : ''}
+    <div class="res-links">${links.join('')}<button type="button" id="ficheCite">📑 Copier la référence</button></div>
+    ${fromT2(r) ? '<p class="hint">Champs « These2.0 » : recopiés du site non officiel thesefmpm.vercel.app (probablement depuis l\'OPAC de la bibliothèque) — à vérifier sur le PDF avant de les citer.</p>' : ''}`;
+  ficheRec = r;
+  const d = $('fiche');
+  if (!d.open) { if (d.showModal) d.showModal(); else d.setAttribute('open', ''); }
+  d.scrollTop = 0;
+  writeHash();
+}
+function closeFiche() { const d = $('fiche'); if (d.open) { if (d.close) d.close(); else d.removeAttribute('open'); } ficheRec = null; writeHash(); }
+function syncFiche() {
+  if (pendingFiche && BY_ID.has(pendingFiche)) { if (!ficheRec || ficheRec.id !== pendingFiche) openFiche(BY_ID.get(pendingFiche)); }
+  else if (!pendingFiche && ficheRec) closeFiche();
+  pendingFiche = null;
+}
+
+/* Facets: what the current results are about, and who supervised them — click to refine. */
+const FACET_N = 8;
+function topCounts(hits, listOf) {
+  const m = new Map();
+  for (const r of hits) {
+    const seen = new Set();
+    for (const [key, label] of listOf(r)) {
+      if (!key || seen.has(key)) continue; seen.add(key);
+      let e = m.get(key); if (!e) m.set(key, e = { n: 0, labels: new Map() });
+      e.n++; e.labels.set(label, (e.labels.get(label) || 0) + 1);
+    }
+  }
+  return [...m.entries()].sort((a, b) => b[1].n - a[1].n).slice(0, FACET_N)
+    .map(([key, e]) => ({ key, n: e.n, label: [...e.labels.entries()].sort((a, b) => b[1] - a[1])[0][0] }));
+}
+function renderFacets() {
+  const hits = last.hits;
+  const col = (title, items, toQuery, empty) => `<div class="facet"><h3>${title}</h3>${items.length
+    ? `<ol>${items.map(it => { const q = toQuery(it); return `<li><button type="button" data-add="${esc(q)}" title="Ajouter ${esc(q)} à la recherche"><span>${esc(it.label)}</span><span class="n">${it.n.toLocaleString('fr-FR')}</span></button></li>`; }).join('')}</ol>`
+    : `<p class="none">${empty}</p>`}</div>`;
+  $('facetBody').innerHTML =
+    col('Spécialités', topCounts(hits, r => r.cat ? [[qv(r.cat), r.cat]] : []), it => `cat:"${it.key}"`, 'Aucune spécialité connue pour ces thèses.') +
+    col('Rapporteurs / jury', topCounts(hits, r => r.people), it => personQuery(it.label), 'Aucun rapporteur dans ces listes.') +
+    (t2State === 'on' ? col('Mots-clés', topCounts(hits, r => r.kws.map(k => [qv(k), k])), it => `motcle:"${it.key}"`, 'Mots-clés : FMPM 2006-2024 seulement (These2.0).') : '') +
+    `<p class="ext-note">Comptés sur les ${hits.length.toLocaleString('fr-FR')} résultats. Spécialité : ${t2State === 'on' ? 'FMPM (These2.0), ' : ''}Fès (avec « résumés + rapporteurs Fès »), FMPR pharmacie (thème, rare).
+      Rapporteurs : FMPR, Fès (avec le CSV complet)${t2State === 'on' ? ', FMPM (These2.0, + président et jury)' : ''}. Les noms sont regroupés sans titres ni initiales — un même professeur peut encore apparaître sous deux formes.</p>`;
+}
+function addToQuery(term) {
+  const cur = $('q').value.trim();
+  if (norm(cur).includes(norm(term))) return;
+  setQuery(cur ? `${cur} ${term}` : term);
+}
+function setQuery(q) {
+  if (ficheRec) closeFiche();
+  $('q').value = q; state.q = q; yearPin = null; run();
+  $('q').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 }
 
 function renderExternal() {
@@ -914,6 +1180,8 @@ function writeHash() {
   if (!state.wordStart) p.set('mot', '0');
   if (state.hideNs) p.set('sout', '1');
   if ($('abs').checked) p.set('res', '1');
+  if (!$('t2').checked && t2State !== 'absent') p.set('t2', '0');
+  if (ficheRec) p.set('fiche', ficheRec.id);
   const h = p.toString();
   history.replaceState(null, '', h ? '#' + h : location.pathname + location.search);
 }
@@ -923,7 +1191,9 @@ function readHash() {
   state.facs = p.get('fac') ? new Set(p.get('fac').split(',').filter(id => SRC[id])) : new Set(SOURCES.map(s => s.id));
   state.y1 = +p.get('y1') || 0; state.y2 = +p.get('y2') || 0;
   yearPin = +p.get('an') || null;
-  state.sort = ['rel', 'new', 'old'].includes(p.get('tri')) ? p.get('tri') : 'rel';
+  state.sort = ['rel', 'new', 'old', 'titre', 'auteur'].includes(p.get('tri')) ? p.get('tri') : 'rel';
+  pendingFiche = p.get('fiche') || null;
+  if (t2State !== 'absent') $('t2').checked = p.get('t2') !== '0';
   state.wordStart = p.get('mot') !== '0';
   state.hideNs = p.get('sout') === '1';
   $('q').value = state.q; $('y1').value = state.y1 || ''; $('y2').value = state.y2 || '';
@@ -932,9 +1202,9 @@ function readHash() {
 }
 
 function exportCsv() {
-  const cols = ['Faculté', 'Filière', 'Année', 'N°', 'Code', 'Auteur', 'Titre', 'Rapporteur', 'Remarque', 'Texte intégral', 'Liste source'];
+  const cols = ['Faculté', 'Filière', 'Année', 'N°', 'Code', 'Auteur', 'Titre', 'Rapporteur', 'Président', 'Jury', 'Spécialité', 'Mots-clés', 'Langue', 'Remarque', 'Texte intégral', 'Liste source', 'Source des champs jury/mots-clés'];
   const q = v => /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
-  const lines = [cols.join(',')].concat(last.hits.map(r => [SRC[r.src].long, SRC[r.src].filiere, r.year || '', r.num, r.code, r.author, r.title, r.rapp, r.note, r.pdf, r.srcList].map(v => q(String(v ?? ''))).join(',')));
+  const lines = [cols.join(',')].concat(last.hits.map(r => [SRC[r.src].long, SRC[r.src].filiere, r.year || '', r.num, r.code, r.author, r.title, r.rapp, r.pres, r.jury, r.cat, r.kw, r.lang, r.note, r.pdf, r.srcList, fromT2(r) ? 'These2.0 (non officiel)' : ''].map(v => q(String(v ?? ''))).join(',')));
   const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -972,6 +1242,10 @@ $('abs').addEventListener('change', () => {
     else if (fesFullState !== 'loading') loadFesFull();
   } else if (fesFullState === 'on') { fesFullState = 'off'; run(); }
 });
+$('t2').addEventListener('change', () => {
+  if (t2State === 'absent') return;
+  t2State = $('t2').checked ? 'on' : 'off'; DB.forEach(setDerived); run();
+});
 $('moreBtn').addEventListener('click', () => { shownCount += PAGE * 2; renderResults(); });
 $('exportCsv').addEventListener('click', () => { if (last.hits.length) exportCsv(); else toast('Rien à exporter.'); });
 $('copyLink').addEventListener('click', async () => {
@@ -1005,7 +1279,27 @@ $('results').addEventListener('click', async e => {
   }
   const citeBtn = e.target.closest('[data-cite]');
   if (citeBtn && await copyText(citation(last.hits[+citeBtn.dataset.cite]))) toast('Référence copiée (à vérifier : casse et ponctuation).');
+  const ficheBtn = e.target.closest('[data-fiche]');
+  if (ficheBtn) openFiche(last.hits[+ficheBtn.dataset.fiche]);
 });
+// Pivots (replace the query) and facets (add to it) — results, fiche and facet panel.
+document.addEventListener('click', e => {
+  const p = e.target.closest('[data-q]'); if (p) { setQuery(p.dataset.q); return; }
+  const a = e.target.closest('[data-add]'); if (a) addToQuery(a.dataset.add);
+});
+$('ficheClose').addEventListener('click', closeFiche);
+$('fiche').addEventListener('close', () => { if (ficheRec) { ficheRec = null; writeHash(); } });
+$('fiche').addEventListener('click', async e => {
+  if (e.target === $('fiche')) { closeFiche(); return; }   // click on the backdrop
+  if (e.target.closest('#ficheCite') && ficheRec && await copyText(citation(ficheRec))) toast('Référence copiée (à vérifier : casse et ponctuation).');
+});
+$('ficheLink').addEventListener('click', async () => {
+  if (!ficheRec) return;
+  const url = location.href.split('#')[0] + '#fiche=' + enc(ficheRec.id);
+  if (await copyText(url)) toast('Lien de la fiche copié.');
+});
+$('facets').addEventListener('toggle', () => lsSet('thesis-archive-facets', $('facets').open ? '1' : '0'));
+if (lsGet('thesis-archive-facets') === '0') $('facets').open = false;
 
 // External sources.
 $('extBody').addEventListener('click', e => {
@@ -1030,7 +1324,11 @@ document.addEventListener('keydown', e => {
   if (e.key === '/' && document.activeElement !== $('q') && !/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) { e.preventDefault(); $('q').focus(); $('q').select(); }
   if (e.key === 'Escape' && document.activeElement === $('q') && $('q').value) { $('q').value = ''; state.q = ''; yearPin = null; run(); }
 });
-window.addEventListener('hashchange', () => { readHash(); run(); });
+window.addEventListener('hashchange', () => {
+  readHash();
+  if (t2State === 'on' || t2State === 'off') { t2State = $('t2').checked ? 'on' : 'off'; DB.forEach(setDerived); }
+  run(); syncFiche();
+});
 
 readHash();
 renderExternal();

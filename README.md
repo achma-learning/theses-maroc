@@ -6,4 +6,6 @@ Moteur de recherche des thèses soutenues dans les facultés de médecine maroca
 - **Sources et limites :** [`archive/sources-theses-maroc.md`](archive/sources-theses-maroc.md)
 - **En local :** `python3 -m http.server`, puis http://localhost:8000/
 
+Dans la page : recherche sans accents (`diabete` trouve « DIABÈTE »), filtres faculté / années, graphique par année. Les noms de rapporteurs, spécialités et mots-clés sont **cliquables** ; le panneau **🧭 Affiner** compte, pour les résultats, les spécialités et les rapporteurs les plus fréquents ; **🗂 Fiche** ouvre une thèse avec son propre lien (`#fiche=fmpm-2024-5`). Syntaxe complète : bouton **?**.
+
 Les données sont les listes que les facultés publient déjà (titre, auteur, année, rapporteur). Les résumés et les PDF ne sont pas republiés : la page renvoie vers les sources officielles. Vérifiez toujours un sujet sur [Toubkal](https://toubkal.imist.ma/search).

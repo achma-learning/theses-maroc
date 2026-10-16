@@ -8,7 +8,7 @@ Faculté de Médecine et de Pharmacie de Marrakech — 3633 thèses, extraites l
 - **Texte intégral (PDF)** : `https://wd.fmpm.uca.ma/biblio/theses/annee-htm/FT/AAAA/theseNN-AA.pdf` (ex. thèse 166 de 2025 → `FT/2025/these166-25.pdf`)
 - **Article / résumé (2006-2014 seulement)** : `…/annee-htm/art/AAAA/articleNN-AA.pdf`
 - **These2.0** (moteur de recherche non officiel, par Akram Ammour) : https://thesefmpm.vercel.app/ — recherche directe : `https://thesefmpm.vercel.app/search?page=1&search=TERME`
-- **Catalogue de la bibliothèque (OPAC)** : http://biblio.fmpm.uca.ma/biblio/opac_css/index.php?lvl=index/
+- **Catalogue de la bibliothèque (OPAC)** : https://lib.fmpm.uca.ma/lib/opac_css/index.php (vérifié le 16/10/2026 ; l’ancienne adresse biblio.fmpm.uca.ma ne répond plus)
 
 ## Limites de cette liste
 
