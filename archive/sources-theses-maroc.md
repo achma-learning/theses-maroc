@@ -29,6 +29,7 @@ Utiliser ces sources pour vérifier qu'un sujet n'a pas déjà été traité ava
 ---
 
 ## FMPM — Marrakech
+- **Liste officielle des spécialités de la FMPM** (42 spécialités : médecine, chirurgie, biologie) : `archive/specialites/liste-specialites-fmpm-2024.pdf`, transcrite dans `specialites-fmpm.csv`. Sert à classer les thèses par correspondance de libellés (`correspondance-specialites.csv`, règles dans `archive/specialites/README.md`).
 - Catalogue officiel par année : https://wd.fmpm.uca.ma/biblio/theses/Accueil.html (une page par année : `…/biblio/theses/annee-htm/AAAA.htm`)
 - **Recherche en ligne sur le site officiel** (toujours à jour) : userscript [`archive/fmpm/methode/fmpm-recherche.user.js`](fmpm/methode/), installable en un clic sur Greasy Fork : https://greasyfork.org/scripts/600588 — barre de recherche sur toutes les années relues en direct + export du CSV brut pour mettre à jour la liste (`build_fmpm.py`, voir `archive/fmpm/methode/README.md`).
 - PDF texte intégral : `https://wd.fmpm.uca.ma/biblio/theses/annee-htm/FT/AAAA/theseNN-AA.pdf`
@@ -79,6 +80,7 @@ Utiliser ces sources pour vérifier qu'un sujet n'a pas déjà été traité ava
 ---
 
 ## FMPDF — Fès
+- **Publié ici** : `archive/fmpdf/theses-fmpf-2007-2026-specialites.csv` — code, rapporteur, spécialité CDIM et lien PDF des 4 657 thèses (sans les résumés).
 - Toubkal : https://toubkal.imist.ma/handle/123456789/51
 - Page thèses de la faculté : https://www.fmp-usmba.ac.ma/theses/
 - **Base de données des thèses (CDIM) — source principale** : https://cdim.fmp-usmba.ac.ma/theses/index.php
