@@ -2,7 +2,7 @@
 
 Utiliser ces sources pour vérifier qu'un sujet n'a pas déjà été traité avant de le proposer.
 
-> Dernière mise à jour : 13/10/2026.
+> Dernière mise à jour : 16/10/2026.
 
 **Recherche locale :** `index.html` (racine du site) cherche dans les 4 CSV extraits à la fois (sans accents, filtres faculté/année, graphique par année) et renvoie la requête vers les sources ci-dessous (Toubkal, These2.0, OPAC FMPM, Google texte intégral, CDIM…). Ouvrir avec `python3 -m http.server` puis `http://localhost:8000/`, ou ouvrir le fichier et choisir le dossier `archive`.
 
@@ -32,8 +32,8 @@ Utiliser ces sources pour vérifier qu'un sujet n'a pas déjà été traité ava
 - Catalogue officiel par année : https://wd.fmpm.uca.ma/biblio/theses/Accueil.html (une page par année : `…/biblio/theses/annee-htm/AAAA.htm`)
 - PDF texte intégral : `https://wd.fmpm.uca.ma/biblio/theses/annee-htm/FT/AAAA/theseNN-AA.pdf`
 - Résumé / article (2006-2014 seulement) : `https://wd.fmpm.uca.ma/biblio/theses/annee-htm/art/AAAA/articleNN-AA.pdf`
-- **OPAC de la bibliothèque FMPM** (catalogue PMB) : https://lib.fmpm.uca.ma/lib/opac_css/index.php — utile pour contrôler les titres tronqués et l'année 2023 (robots.txt non vérifié).
-- These2.0 (recherche par mot-clé) : `https://thesefmpm.vercel.app/search?page=1&search=TERME`
+- **OPAC de la bibliothèque FMPM** (catalogue PMB) : https://lib.fmpm.uca.ma/lib/opac_css/index.php — utile pour contrôler les titres tronqués et l'année 2023. Vérifié le 16/10/2026 : répond, robots.txt absent ; l'ancienne adresse `biblio.fmpm.uca.ma` ne répond plus.
+- These2.0 (moteur non officiel, fait par un étudiant) : recherche `https://thesefmpm.vercel.app/search?page=1&search=TERME` ; fiche `https://thesefmpm.vercel.app/these/theseNN-AA` avec président, rapporteur, jury, mots-clés, spécialité. 3 219 thèses, s'arrête en 2024 (n° 38) — vérifié le 16/10/2026. La fiche de chaque thèse FMPM 2006-2024 de `index.html` y renvoie.
 - Toubkal : https://toubkal.imist.ma/handle/123456789/3
 - **Liste complète extraite (2006-2026)** : `archive/fmpm/catalogue-theses-fmpm.md` et `archive/fmpm/theses-fmpm-2006-2026.csv`
   - Lacunes : 385 titres tronqués « … » ; 2023 incomplet après le n° 261 (à re-scraper).
