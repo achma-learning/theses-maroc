@@ -3,6 +3,7 @@
 Moteur de recherche des thèses soutenues dans les facultés de médecine marocaines : FMPM Marrakech, FMPR Rabat (médecine et pharmacie) et FMP Fès. Il sert à vérifier qu'un sujet n'a pas déjà été traité.
 
 - **Page :** `index.html`. Elle lit les CSV du dossier `archive/`.
+- **Recherche en direct sur le site de la FMPM (toujours à jour) :** userscript [sur Greasy Fork](https://greasyfork.org/scripts/600588) — détails dans [`archive/fmpm/methode/`](archive/fmpm/methode/README.md).
 - **Sources et limites :** [`archive/sources-theses-maroc.md`](archive/sources-theses-maroc.md)
 - **En local :** `python3 -m http.server`, puis http://localhost:8000/
 

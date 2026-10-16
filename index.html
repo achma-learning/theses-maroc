@@ -448,6 +448,7 @@ const EXTERNAL = [
     { bang: 'opac', name: 'OPAC bibliothèque FMPM (PMB)', url: q => `https://lib.fmpm.uca.ma/lib/opac_css/index.php?lvl=search_result&search_type_asked=simple_search&user_query=${enc(q)}` },
     { bang: 'gfmpm', name: 'Google — texte intégral PDF FMPM', url: q => `https://www.google.com/search?q=${enc('site:wd.fmpm.uca.ma/biblio/theses ' + q)}` },
     { name: 'Catalogue officiel par année', url: () => 'https://wd.fmpm.uca.ma/biblio/theses/Accueil.html', link: true },
+    { name: 'Userscript : recherche en direct sur le site officiel + export CSV (Greasy Fork)', url: () => 'https://greasyfork.org/scripts/600588', link: true },
     { name: 'Toubkal — collection FMPM', url: () => 'https://toubkal.imist.ma/handle/123456789/3', link: true }
   ]},
   { group: 'FMPR — Rabat', items: [
