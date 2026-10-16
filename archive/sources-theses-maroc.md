@@ -30,6 +30,7 @@ Utiliser ces sources pour vérifier qu'un sujet n'a pas déjà été traité ava
 
 ## FMPM — Marrakech
 - Catalogue officiel par année : https://wd.fmpm.uca.ma/biblio/theses/Accueil.html (une page par année : `…/biblio/theses/annee-htm/AAAA.htm`)
+- **Recherche en ligne sur le site officiel** (toujours à jour) : userscript [`archive/fmpm/methode/fmpm-recherche.user.js`](fmpm/methode/), installable en un clic sur Greasy Fork : https://greasyfork.org/scripts/600588 — barre de recherche sur toutes les années relues en direct + export du CSV brut pour mettre à jour la liste (`build_fmpm.py`, voir `archive/fmpm/methode/README.md`).
 - PDF texte intégral : `https://wd.fmpm.uca.ma/biblio/theses/annee-htm/FT/AAAA/theseNN-AA.pdf`
 - Résumé / article (2006-2014 seulement) : `https://wd.fmpm.uca.ma/biblio/theses/annee-htm/art/AAAA/articleNN-AA.pdf`
 - **OPAC de la bibliothèque FMPM** (catalogue PMB) : https://lib.fmpm.uca.ma/lib/opac_css/index.php — utile pour contrôler les titres tronqués et l'année 2023. Vérifié le 16/10/2026 : répond, robots.txt absent ; l'ancienne adresse `biblio.fmpm.uca.ma` ne répond plus.
