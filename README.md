@@ -4,6 +4,7 @@ Moteur de recherche des thèses soutenues dans les facultés de médecine maroca
 
 - **Page :** `index.html`. Elle lit les CSV du dossier `archive/`.
 - **Recherche en direct sur le site de la FMPM (toujours à jour) :** userscript [sur Greasy Fork](https://greasyfork.org/scripts/600588) — détails dans [`archive/fmpm/methode/`](archive/fmpm/methode/README.md).
+- **Spécialités :** les thèses sont classées selon la [liste officielle des spécialités de la FMPM](archive/specialites/liste-specialites-fmpm-2024.pdf) (42 spécialités : médecine, chirurgie, biologie), par correspondance avec le libellé de chaque source — 97 % des thèses de Fès, une partie des thèses de pharmacie de Rabat. Recherche `spe:"oncologie medicale"`, `option:chirurgie`. Règles et table : [`archive/specialites/`](archive/specialites/README.md).
 - **Sources et limites :** [`archive/sources-theses-maroc.md`](archive/sources-theses-maroc.md)
 - **En local :** `python3 -m http.server`, puis http://localhost:8000/
 

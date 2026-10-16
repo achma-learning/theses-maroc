@@ -300,7 +300,7 @@
     <p class="hint" id="hint" hidden>
       Sans accents ni majuscules : <code>diabete</code> trouve « DIABÈTE ». Tous les mots doivent être présents.
       <code>"pied bot"</code> expression exacte · <code>-enfant</code> exclure · <code>lupus|les</code> l'un ou l'autre ·
-      <code>titre:</code> <code>auteur:</code> <code>rapporteur:</code> <code>jury:</code> <code>motcle:</code> <code>cat:</code> <code>code:</code> <code>resume:</code> cibler un champ · <code>langue:en</code> ·
+      <code>titre:</code> <code>auteur:</code> <code>rapporteur:</code> <code>jury:</code> <code>motcle:</code> <code>spe:</code> (spécialité de la liste officielle FMPM) <code>option:chirurgie</code> (<code>medecine</code>, <code>biologie</code>) <code>cat:</code> (libellé de la source) <code>code:</code> <code>resume:</code> cibler un champ · <code>langue:en</code> ·
       <code>annee:2020</code> <code>annee:2015-2020</code> <code>annee:&gt;2018</code> · <code>fac:fes</code> (<code>fmpm</code>, <code>fmpr</code>, <code>med</code>, <code>pharma</code>, <code>fes</code>).
       Bangs (comme searchAIO, ouvrent la source externe avec Entrée) : <code>!toubkal</code> <code>!t2</code> <code>!opac</code> <code>!gfmpm</code> <code>!gfes</code> <code>!these</code> <code>!cismef</code>.
       Les noms, mots-clés et spécialités soulignés en pointillé se cliquent : ils lancent la recherche correspondante.
@@ -429,6 +429,14 @@ const FES_FULL = { file: 'archive/fmpdf/theses-fmpf-2007-2026-complet.csv', matc
 // These2.0 (unofficial student site, archive/fmpm/methode/scrape_these2.py). Joined to fmpm rows
 // by year + N°, only when title or author agree. Never overwrites an official field.
 const T2_FMPM = { file: null /* not published in this public mirror */, match: /^these2-fmpm-\d{4}-\d{4}\.csv$/ };
+// Light (≈0.5 MB), always loaded: Fès rapporteur + spécialité (official CDIM export, no abstracts).
+const FES_SPEC = { file: 'archive/fmpdf/theses-fmpf-2007-2026-specialites.csv', match: /^theses-fmpf-\d{4}-\d{4}-specialites\.csv$/ };
+// Official FMPM specialty list (archive/specialites/liste-specialites-fmpm-2024.pdf) and the table that
+// maps each source's own label (These2.0 category, Fès spécialité, FMPR pharmacie thème) onto it.
+const SPE_TABLE = { file: 'archive/specialites/correspondance-specialites.csv', match: /^correspondance-specialites\.csv$/ };
+const SPE_SRC = { fmpm: 'These2.0 (FMPM)', fmpdf: 'FMP Fès (CDIM)', fmprp: 'FMPR Pharmacie (thème)' };
+const SPE_MAP = new Map();    // "source|normalized label" → { spe, opt, rem }
+const optShort = o => (o || '').replace(/^Spécialités de /i, '').replace(/^./, c => c.toUpperCase());
 
 /* =====================================================================
    2. EXTERNAL SOURCES — mirrors archive/sources-theses-maroc.md (the source
@@ -593,6 +601,9 @@ function setDerived(rec) {
   rec.t2title = t ? t.title : '';
   if (rec.src === 'fmpm') { rec.rapp = t ? t.rapp : ''; rec.nR = norm(rec.rapp); }
   rec.cat = t ? t.cat : (rec.spec || rec.theme);
+  const m = rec.cat ? SPE_MAP.get(`${SPE_SRC[rec.src]}|${norm(rec.cat)}`) : null;
+  rec.spe = m ? m.spe : ''; rec.opt = m ? m.opt : ''; rec.speNote = m ? m.rem : '';
+  rec.nP = norm(rec.spe); rec.nO = norm(rec.opt);
   rec.nJ = norm([rec.pres, rec.jury].join(' ; '));
   rec.nK = norm(rec.kw);
   rec.nS = norm(rec.cat);
@@ -645,6 +656,24 @@ function mergeFesFull(rows) {
   return n;
 }
 
+function mergeFesSpec(rows) {
+  const byPdf = new Map(DB.filter(r => r.src === 'fmpdf').map(r => [r.pdf, r]));
+  let n = 0;
+  for (const r of rows) {
+    const rec = byPdf.get(r['PDF (texte intégral)']);
+    if (!rec) continue;
+    rec.rapp = r['Rapporteur'] || rec.rapp; rec.nR = norm(rec.rapp);
+    if (r['Code']) { rec.code = r['Code']; rec.nC = norm(rec.code); }
+    rec.spec = r['Spécialité'] || '';
+    n++;
+  }
+  return n;
+}
+function loadSpeTable(rows) {
+  SPE_MAP.clear();
+  for (const r of rows || []) SPE_MAP.set(`${r['Source']}|${norm(r['Libellé source'])}`, { spe: r['Spécialité FMPM'], opt: r['Option'], rem: r['Remarque'] });
+}
+
 async function fetchText(path) {
   const res = await fetch(path, { cache: 'no-cache' });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -653,13 +682,22 @@ async function fetchText(path) {
 
 async function loadAll() {
   const t0 = performance.now();
-  const t2 = T2_FMPM.file ? fetchText(T2_FMPM.file).then(parseCSV).catch(() => null) : null;   // in parallel; absent = fine
+  const opt = f => f ? fetchText(f).then(parseCSV).catch(() => null) : null;   // in parallel; absent = fine
+  const t2 = opt(T2_FMPM.file), fesSpec = opt(FES_SPEC.file), speTable = opt(SPE_TABLE.file);
   await Promise.all(SOURCES.map(async s => {
     try { addRecords(s, parseCSV(await fetchText(s.file))); }
     catch (e) { loaded[s.id] = e; }
   }));
-  applyT2Rows(await t2);
+  applyLayers(await fesSpec, await speTable, await t2);
   afterLoad(performance.now() - t0);
+}
+
+let fesSpecCount = 0;
+function applyLayers(fesSpecRows, speRows, t2RowsIn) {
+  if (speRows) loadSpeTable(speRows);
+  if (fesSpecRows && typeof loaded.fmpdf === 'number') fesSpecCount = mergeFesSpec(fesSpecRows);
+  applyT2Rows(t2RowsIn);
+  DB.forEach(setDerived);
 }
 
 let t2Rows = null;
@@ -692,6 +730,8 @@ function renderStatus(ms) {
     if (v instanceof Error) return `<span class="err">✘ ${esc(s.long)} (${esc(v.message)})</span>`;
     return `<span>… ${esc(s.long)}</span>`;
   });
+  const nSpe = DB.filter(r => r.spe).length;
+  if (nSpe) parts.push(`<span title="Spécialité de la liste officielle FMPM, déduite du libellé de la source (archive/specialites/)">＋ spécialité FMPM : ${nSpe.toLocaleString('fr-FR')} thèses</span>`);
   if (t2Count) parts.push(`<span title="Couche non officielle, jointe par année + N°">＋ These2.0 : ${t2Count.toLocaleString('fr-FR')} fiches FMPM</span>`);
   if (ms) parts.push(`<span>chargé en ${(ms / 1000).toFixed(1)} s</span>`);
   $('status').innerHTML = parts.join('');
@@ -726,8 +766,8 @@ async function loadFromFiles(fileList) {
   }
   pickedFesFull = files.find(f => FES_FULL.match.test(f.name)) || null;
   if (!SOURCES.some(s => typeof loaded[s.id] === 'number')) { toast('Aucun fichier theses-*.csv reconnu.'); return; }
-  const t2File = files.find(f => T2_FMPM.match.test(f.name));
-  applyT2Rows(t2File ? parseCSV(await t2File.text()) : null);
+  const pick = async m => { const f = files.find(f => m.match.test(f.name)); return f ? parseCSV(await f.text()) : null; };
+  applyLayers(await pick(FES_SPEC), await pick(SPE_TABLE), await pick(T2_FMPM));
   afterLoad(performance.now() - t0);
 }
 
@@ -756,7 +796,9 @@ const FIELD_ALIASES = {
   rapporteur: 'rapp', directeur: 'rapp', r: 'rapp',
   jury: 'jury', j: 'jury', president: 'jury', prof: 'jury',
   motcle: 'kw', motscles: 'kw', mc: 'kw', tag: 'kw', tags: 'kw', kw: 'kw',
-  cat: 'cat', categorie: 'cat', specialite: 'cat', spe: 'cat', theme: 'cat',
+  cat: 'cat', categorie: 'cat', theme: 'cat',
+  spe: 'spe', specialite: 'spe', specialty: 'spe',
+  option: 'opt', opt: 'opt',
   langue: 'lang', lang: 'lang', l: 'lang',
   code: 'code', n: 'code',
   resume: 'abs', abstract: 'abs', abs: 'abs',
@@ -817,8 +859,8 @@ function compileTerms(terms, wordStart) {
   });
 }
 
-const FIELD_SCORE = { nT: 10, nT2: 8, nC: 8, nA: 6, nK: 4, nR: 3, nJ: 2, nS: 2, nX: 2, nL: 1, nAbs: 1 };
-const DEFAULT_FIELDS = ['nT', 'nT2', 'nA', 'nR', 'nJ', 'nK', 'nS', 'nC', 'nX'];
+const FIELD_SCORE = { nT: 10, nT2: 8, nC: 8, nA: 6, nK: 4, nR: 3, nJ: 2, nS: 2, nP: 2, nX: 2, nO: 1, nL: 1, nAbs: 1 };
+const DEFAULT_FIELDS = ['nT', 'nT2', 'nA', 'nR', 'nJ', 'nK', 'nS', 'nP', 'nC', 'nX'];
 function fieldsFor(term, withAbs) {
   switch (term.field) {
     case 'title': return ['nT', 'nT2'];
@@ -827,6 +869,8 @@ function fieldsFor(term, withAbs) {
     case 'jury': return ['nR', 'nJ'];
     case 'kw': return ['nK'];
     case 'cat': return ['nS'];
+    case 'spe': return ['nP'];
+    case 'opt': return ['nO'];
     case 'lang': return ['nL'];
     case 'code': return ['nC'];
     case 'abs': return ['nAbs'];
@@ -1022,6 +1066,11 @@ function pivot(label, query, terms, cls = 'pivot') {
 const SEP = '<span class="sep"> · </span>';
 function people(s, terms) { return splitNames(s).map(n => pivot(n, personQuery(n), terms)).join(SEP); }
 function catPivot(r, cls) { return r.cat ? pivot(r.cat, `cat:"${qv(r.cat)}"`, null, cls) : ''; }
+// Official FMPM specialty when the source label maps onto one, else the source's own label.
+function spePivot(r, cls) {
+  if (!r.spe) return catPivot(r, cls);
+  return `<button type="button" class="${cls || 'pivot'}" data-q="${esc(`spe:"${qv(r.spe)}"`)}" title="Spécialité (liste officielle FMPM, ${esc(optShort(r.opt))}) — d'après « ${esc(r.cat)} »">${esc(r.spe)}</button>`;
+}
 function kwPivots(r, terms, max = Infinity) { return r.kws.slice(0, max).map(k => pivot(k, `motcle:"${qv(k)}"`, terms, 'kw')).join(''); }
 const fromT2 = r => !!(r.t2 && t2State === 'on');
 
@@ -1050,7 +1099,7 @@ function renderRow(r, i, terms) {
     </div>
     <div class="res-title">${r.title ? highlight(r.title, terms) : '<em>(titre absent de la source)</em>'}</div>
     <div class="res-people">${r.author ? highlight(r.author, terms) : '<em>auteur absent</em>'}${r.rapp ? ` <span class="lbl">· rapporteur</span> ${people(r.rapp, terms)}` : ''}${r.pres ? ` <span class="lbl">· président</span> ${people(r.pres, terms)}` : ''}</div>
-    ${r.cat || r.kws.length ? `<div class="res-kw">${catPivot(r, 'kw cat')}${kwPivots(r, terms, 5)}${r.kws.length > 5 ? `<span class="unoff">+${r.kws.length - 5}</span>` : ''}${fromT2(r) ? '<span class="unoff" title="Rapporteur, président, spécialité et mots-clés recopiés de These2.0 (non officiel)">These2.0</span>' : ''}</div>` : ''}
+    ${r.cat || r.kws.length ? `<div class="res-kw">${spePivot(r, 'kw cat')}${kwPivots(r, terms, 5)}${r.kws.length > 5 ? `<span class="unoff">+${r.kws.length - 5}</span>` : ''}${fromT2(r) ? '<span class="unoff" title="Rapporteur, président, spécialité et mots-clés recopiés de These2.0 (non officiel)">These2.0</span>' : ''}</div>` : ''}
     <div class="res-links">${links.join('')}</div>
     <div class="abstract" data-abs-body="${i}" hidden></div>
   </li>`;
@@ -1090,7 +1139,8 @@ function openFiche(r) {
       ${row('N°', esc(r.num))}
       ${row('Code', r.code && highlight(r.code, terms))}
       ${row('Faculté', esc(`${s.fullName} — ${s.filiere}`))}
-      ${row('Spécialité' + (r.t2 && r.t2.cat && fromT2(r) ? un : ''), r.cat && (catPivot(r) + (fromT2(r) && r.t2.catPath ? ` <span class="unoff">${esc(r.t2.catPath)}</span>` : '')))}
+      ${row('Spécialité FMPM', (r.spe || r.opt) && `${r.spe ? spePivot(r) : '<em>non attribuée</em>'} <span class="sep">·</span> ${pivot(optShort(r.opt), `option:${qv(optShort(r.opt))}`)}${r.speNote ? ` <span class="unoff">${esc(r.speNote)}</span>` : ''}`)}
+      ${row('Catégorie source' + (r.t2 && r.t2.cat && fromT2(r) ? un : ''), r.cat && (catPivot(r) + (fromT2(r) && r.t2.catPath ? ` <span class="unoff">${esc(r.t2.catPath)}</span>` : '') + (!r.spe && !r.opt && r.speNote ? ` <span class="unoff">${esc(r.speNote)}</span>` : '')))}
       ${row('Langue' + un, esc(r.lang))}
       ${row('Président' + un, r.pres && people(r.pres, terms))}
       ${row('Rapporteur' + (r.src === 'fmpm' ? un : ''), r.rapp && people(r.rapp, terms))}
@@ -1136,11 +1186,12 @@ function renderFacets() {
     ? `<ol>${items.map(it => { const q = toQuery(it); return `<li><button type="button" data-add="${esc(q)}" title="Ajouter ${esc(q)} à la recherche"><span>${esc(it.label)}</span><span class="n">${it.n.toLocaleString('fr-FR')}</span></button></li>`; }).join('')}</ol>`
     : `<p class="none">${empty}</p>`}</div>`;
   $('facetBody').innerHTML =
-    col('Spécialités', topCounts(hits, r => r.cat ? [[qv(r.cat), r.cat]] : []), it => `cat:"${it.key}"`, 'Aucune spécialité connue pour ces thèses.') +
+    col('Spécialités (liste FMPM)', topCounts(hits, r => r.spe ? [[qv(r.spe), r.spe]] : []), it => `spe:"${it.key}"`, 'Aucune spécialité connue pour ces thèses.') +
+    col('Options (liste FMPM)', topCounts(hits, r => r.opt ? [[qv(optShort(r.opt)), optShort(r.opt)]] : []), it => `option:${it.key}`, '—') +
     col('Rapporteurs / jury', topCounts(hits, r => r.people), it => personQuery(it.label), 'Aucun rapporteur dans ces listes.') +
     (t2State === 'on' ? col('Mots-clés', topCounts(hits, r => r.kws.map(k => [qv(k), k])), it => `motcle:"${it.key}"`, 'Mots-clés : FMPM 2006-2024 seulement (These2.0).') : '') +
-    `<p class="ext-note">Comptés sur les ${hits.length.toLocaleString('fr-FR')} résultats. Spécialité : ${t2State === 'on' ? 'FMPM (These2.0), ' : ''}Fès (avec « résumés + rapporteurs Fès »), FMPR pharmacie (thème, rare).
-      Rapporteurs : FMPR, Fès (avec le CSV complet)${t2State === 'on' ? ', FMPM (These2.0, + président et jury)' : ''}. Les noms sont regroupés sans titres ni initiales — un même professeur peut encore apparaître sous deux formes.</p>`;
+    `<p class="ext-note">Comptés sur les ${hits.length.toLocaleString('fr-FR')} résultats. Spécialités et options : <a href="archive/specialites/liste-specialites-fmpm-2024.pdf" target="_blank" rel="noopener noreferrer">liste officielle de la FMPM</a>, déduites du libellé de chaque source — ${t2State === 'on' ? 'FMPM (catégorie These2.0), ' : ''}Fès (spécialité CDIM), FMPR pharmacie (thème, rare) ; table : <code>archive/specialites/correspondance-specialites.csv</code>.
+      Rapporteurs : FMPR, Fès${t2State === 'on' ? ', FMPM (These2.0, + président et jury)' : ''}. Les noms sont regroupés sans titres ni initiales — un même professeur peut encore apparaître sous deux formes.</p>`;
 }
 function addToQuery(term) {
   const cur = $('q').value.trim();
@@ -1203,9 +1254,9 @@ function readHash() {
 }
 
 function exportCsv() {
-  const cols = ['Faculté', 'Filière', 'Année', 'N°', 'Code', 'Auteur', 'Titre', 'Rapporteur', 'Président', 'Jury', 'Spécialité', 'Mots-clés', 'Langue', 'Remarque', 'Texte intégral', 'Liste source', 'Source des champs jury/mots-clés'];
+  const cols = ['Faculté', 'Filière', 'Année', 'N°', 'Code', 'Auteur', 'Titre', 'Rapporteur', 'Président', 'Jury', 'Spécialité FMPM', 'Option FMPM', 'Catégorie source', 'Mots-clés', 'Langue', 'Remarque', 'Texte intégral', 'Liste source', 'Source des champs jury/mots-clés'];
   const q = v => /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
-  const lines = [cols.join(',')].concat(last.hits.map(r => [SRC[r.src].long, SRC[r.src].filiere, r.year || '', r.num, r.code, r.author, r.title, r.rapp, r.pres, r.jury, r.cat, r.kw, r.lang, r.note, r.pdf, r.srcList, fromT2(r) ? 'These2.0 (non officiel)' : ''].map(v => q(String(v ?? ''))).join(',')));
+  const lines = [cols.join(',')].concat(last.hits.map(r => [SRC[r.src].long, SRC[r.src].filiere, r.year || '', r.num, r.code, r.author, r.title, r.rapp, r.pres, r.jury, r.spe, optShort(r.opt), r.cat, r.kw, r.lang, r.note, r.pdf, r.srcList, fromT2(r) ? 'These2.0 (non officiel)' : ''].map(v => q(String(v ?? ''))).join(',')));
   const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
