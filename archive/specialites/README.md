@@ -3,6 +3,7 @@
 | Fichier | Contenu |
 |---|---|
 | `liste-specialites-fmpm-2024.pdf` | Document officiel « Liste des spécialités — Faculté de Médecine et de Pharmacie de Marrakech » (export Word du 26/10/2024 ; une version Excel de 2020 a exactement le même contenu). |
+| `specialites-fmpm.txt` | La même liste en texte brut, par option (numérotée), pour lire ou copier. |
 | `specialites-fmpm.csv` | Transcription du PDF : 42 spécialités en 3 options — médecine (23), chirurgie (14), biologie (5). Libellés recopiés tels quels, fautes comprises (« Périphirique », « Analyses biologies médicales »). |
 | `correspondance-specialites.csv` | Table qui rattache le libellé propre à chaque source à une spécialité de la liste : `Source, Libellé source, Spécialité FMPM, Option, Remarque`. |
 
