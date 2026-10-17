@@ -14,12 +14,17 @@ Usage :
 
 --dry-run : rapport seulement, rien n'est écrit.
 --force   : écrit même si le nouveau fichier a beaucoup moins de lignes (export probablement cassé).
+--merge   : garde la ligne actuelle quand la thèse y est déjà (même année + n° + auteur ou début de
+            titre) — le site réintroduit parfois des accents cassés (« Expïrience ») et des
+            apostrophes typographiques que la copie locale avait corrigés ; prend le titre du site
+            seulement s'il complète un titre « … », et ajoute les thèses nouvelles. Recommandé.
 Python 3 standard, aucune dépendance.
 """
 import csv
 import datetime
 import re
 import sys
+import unicodedata
 from collections import Counter, OrderedDict
 from pathlib import Path
 
@@ -45,6 +50,35 @@ def read_rows(path):
 
 def key(row):
     return (row[0], row[1], row[2].lower(), row[3].lower())
+
+
+def base(s):
+    s = unicodedata.normalize('NFD', s.lower())
+    return ''.join(c for c in s if c.isascii() and c.isalnum())
+
+
+def merge(old, rows):
+    """Old rows win for theses already there; truncated titles are completed; new theses added."""
+    by_slot = {}
+    for r in rows:
+        by_slot.setdefault((r[0], r[1]), []).append(r)
+    used, out, completed = set(), [], 0
+    for o in old:
+        match = next((r for r in by_slot.get((o[0], o[1]), []) if id(r) not in used and (
+            base(r[2]) == base(o[2]) or base(r[3])[:25] == base(o[3])[:25])), None)
+        if match is None:
+            out.append(o)
+            continue
+        used.add(id(match))
+        o = list(o)
+        if o[3].endswith('…') and not match[3].endswith('…') and base(match[3]).startswith(base(o[3])[:30]):
+            o[3] = match[3]
+            completed += 1
+        o[4], o[5] = o[4] or match[4], o[5] or match[5]
+        out.append(o)
+    added = [r for r in rows if id(r) not in used]
+    kept_only_here = len(old) - len(used)
+    return sorted(out + added, key=sort_key), len(added), completed, kept_only_here
 
 
 def sort_key(row):
@@ -115,7 +149,7 @@ def build_catalogue(rows, today, merged):
 
 def main(argv):
     args = [a for a in argv if not a.startswith('--')]
-    dry, force = '--dry-run' in argv, '--force' in argv
+    dry, force, do_merge = '--dry-run' in argv, '--force' in argv, '--merge' in argv
     if len(args) != 1:
         sys.exit(__doc__)
     raw_path = Path(args[0])
@@ -135,6 +169,10 @@ def main(argv):
 
     old_path = current_csv()
     old = read_rows(old_path)
+    if do_merge:
+        rows, n_added, n_completed, n_kept = merge(old, rows)
+        print(f'--merge : {n_added} thèses ajoutées, {n_completed} titres « … » complétés, '
+              f'{n_kept} lignes gardées bien qu\'absentes du site (ou autre auteur/titre sous ce n°).\n')
     old_keys = {key(r) for r in old}
     new_keys = {key(r) for r in rows}
     old_by_slot = {(r[0], r[1], r[2].lower()): r for r in old}
@@ -180,9 +218,9 @@ def main(argv):
 
     print(f'\nÉcrit : {new_path.name} ({len(rows)} lignes) ; ancien fichier → {backup.name} ; {CATALOGUE.name} régénéré.')
     if new_path.name != old_path.name:
-        print(f'⚠ Nom changé ({old_path.name} → {new_path.name}) : mettre à jour SOURCES dans index.html, '
+        print(f'⚠ Nom changé ({old_path.name} → {new_path.name}) : mettre à jour SOURCES dans thesis-archive.html, '
               'README.md, CONTEXT.md et archive/sources-theses-maroc.md dans le même commit.')
-    print('À faire ensuite : mettre à jour les nombres (README, CONTEXT, sources-theses-maroc.md, pied de page de index.html).')
+    print('À faire ensuite : mettre à jour les nombres (README, CONTEXT, sources-theses-maroc.md, pied de page de thesis-archive.html).')
 
 
 if __name__ == '__main__':
