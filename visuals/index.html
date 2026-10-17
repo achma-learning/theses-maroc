@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Visuels des thèses</title>
+  <meta name="description" content="Tableau de bord des thèses FMPM : années, spécialités officielles, rapporteurs, types d'étude, villes (graphiques interactifs, vérifiés chaque semaine).">
+  <link rel="icon" href="../these2/assets/icon.png">
+  <link rel="stylesheet" href="../these2/assets/style.css">
+</head>
+<body data-base="../these2/">
+  <nav class="nav">
+    <a class="brand" href="../">Thèses Maroc</a>
+    <div class="links">
+      <a href="../">Recherche</a>
+      <a href="../these2/">These2.0 FMPM</a>
+      <a href="./" aria-current="page">📊 Visuels</a>
+    </div>
+  </nav>
+  <main>
+    <h1>Tableau de bord des thèses FMPM</h1>
+    <p class="sub" id="sub">Chargement…</p>
+    <div class="kpis" id="kpis"></div>
+    <nav class="toc" id="toc" aria-label="Sections"></nav>
+    <div id="charts"></div>
+
+    <section class="explorer" id="explorer">
+      <h2>Filtrage dynamique</h2>
+      <div class="controls">
+        <input id="fq" type="search" placeholder="Recherche rapide dans le titre ou l'auteur" aria-label="Recherche rapide">
+        <select id="fgroup" aria-label="Groupe"><option value="">Groupe</option></select>
+        <select id="fspec" aria-label="Spécialité"><option value="">Spécialité</option></select>
+        <select id="fyear" aria-label="Année"><option value="">Année</option></select>
+        <button id="reset" class="btn" type="button">Réinitialiser</button>
+        <button id="csv" class="btn" type="button">Export CSV</button>
+      </div>
+      <p class="active-filter" id="factive"></p>
+      <p class="meta" id="fmeta" aria-live="polite"></p>
+      <div class="scroll tall">
+        <table>
+          <thead><tr><th>Année</th><th>N°</th><th>Spécialité</th><th>Groupe</th><th>Titre de la thèse</th><th>PDF</th></tr></thead>
+          <tbody id="frows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <p class="sub">
+      Spécialités et groupes suivent la <a href="https://github.com/achma-learning/theses-maroc/blob/main/archive/specialites/liste-specialites-fmpm-2024.pdf">liste officielle des spécialités de la FMPM</a>.
+      Quand la bibliothèque n'a pas classé une thèse (presque toutes depuis 2024), la spécialité est
+      déduite des autres thèses du rapporteur, ou du titre si le modèle est assez sûr (hachures sur
+      les graphiques, « ? » dans le tableau). Type d'étude et villes sont lus dans le titre : ce sont
+      des estimations. Le site officiel est contrôlé chaque semaine ; graphiques et données ne sont
+      régénérés que s'il a changé.
+    </p>
+  </main>
+  <footer>
+    Graphiques interactifs · export PNG matplotlib ·
+    <a href="https://wd.fmpm.uca.ma/biblio/theses/Accueil.html">thèses FMPM (site officiel)</a> ·
+    <a href="https://cdim.fmp-usmba.ac.ma/stats/dashboard_theses.php">thèses FMPDF Fès (site officiel)</a>
+  </footer>
+  <script src="../these2/assets/charts.js"></script>
+  <script src="../these2/assets/dashboard.js"></script>
+</body>
+</html>
