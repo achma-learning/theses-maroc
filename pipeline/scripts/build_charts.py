@@ -86,7 +86,7 @@ def group(t: dict) -> str:
     return t.get("groupe") or UNCLASSIFIED
 
 
-SOURCES = [("catalogue", "Catégorie de la bibliothèque"), ("rapporteur", "Déduite du rapporteur"),
+SOURCES = [("catalogue", "Page de garde ou bibliothèque"), ("rapporteur", "Déduite du rapporteur"),
            ("titre", "Déduite du titre")]
 
 
@@ -185,8 +185,10 @@ def build(json_path: Path, out: Path) -> dict:
     by_src = defaultdict(Counter)  # specialty -> {source: n}
     grp_src = defaultdict(Counter)  # group -> {source: n}
     for t in data:
-        by_src[specialty(t)][t.get("specialiteSource", "none")] += 1
-        grp_src[group(t)][t.get("specialiteSource", "none")] += 1
+        src = t.get("specialiteSource", "none")
+        src = "catalogue" if src in ("page de garde", "vérifiée") else src  # facts, drawn solid like the library
+        by_src[specialty(t)][src] += 1
+        grp_src[group(t)][src] += 1
     specs = sorted(by_src, key=lambda s: (s == UNCLASSIFIED, -sum(by_src[s].values())))
     classified = [s for s in specs if s != UNCLASSIFIED]
     group_of = {s: g for g, ss in GROUPS.items() for s in ss}
@@ -268,7 +270,7 @@ def build(json_path: Path, out: Path) -> dict:
         [[s, group_of.get(s, UNCLASSIFIED)] + [by_src[s][k] for k, _ in SOURCES] + [sum(by_src[s].values())] for s in specs],
         lambda th: hbars(th, specs, [by_src[s]["catalogue"] + by_src[s]["none"] for s in specs],  # "none" = Non classée row
                          f"Répartition par spécialité officielle ({len(classified)} / 42)",
-                         "Bibliothèque = catégorie du catalogue · rapporteur / titre = déduction automatique (hachures)",
+                         "Plein = page de garde (président du jury) ou catégorie du catalogue · rapporteur / titre = déduction automatique (hachures)",
                          extras=src_extras(specs, by_src), main_label=SOURCES[0][1], neutral=(UNCLASSIFIED,)))
 
     add("specialty-heatmap", "Thématiques", "Spécialités × années (top 15)",
