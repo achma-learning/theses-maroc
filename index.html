@@ -366,7 +366,8 @@
 
   <footer>
     Données : <code>archive/**/theses-*.csv</code> de ce site (sources et limites : <a href="archive/sources-theses-maroc.md">archive/sources-theses-maroc.md</a>).
-    Les listes de Rabat sont en MAJUSCULES et souvent sans accents ; la FMPM a 385 titres tronqués « … » et 2023 s'arrête au n° 261 ; Fès : liste complète 2007-2026, sans les résumés.
+    Les listes de Rabat sont en MAJUSCULES et souvent sans accents ; FMPM : copie du 17/10/2026 (4 013 thèses), les ajouts plus récents sont sur le site officiel ; Fès : liste complète 2007-2026, sans les résumés.
+    Spécialité FMPM : celle du président du jury, lue sur la page de garde du PDF officiel.
     Jury et mots-clés des thèses FMPM 2006-2024 : lien « These2.0 » dans la fiche (site non officiel d'un étudiant).
     Vérifiez toujours un sujet sur <a href="https://toubkal.imist.ma/search" target="_blank" rel="noopener noreferrer">Toubkal</a> avant de le déposer.
   </footer>
@@ -431,6 +432,10 @@ const FES_FULL = { file: 'archive/fmpdf/theses-fmpf-2007-2026-complet.csv', matc
 const T2_FMPM = { file: null /* not published in this public mirror */, match: /^these2-fmpm-\d{4}-\d{4}\.csv$/ };
 // Light (≈0.5 MB), always loaded: Fès rapporteur + spécialité (official CDIM export, no abstracts).
 const FES_SPEC = { file: 'archive/fmpdf/theses-fmpf-2007-2026-specialites.csv', match: /^theses-fmpf-\d{4}-\d{4}-specialites\.csv$/ };
+// Light (≈1.5 MB), always loaded: FMPM jury + specialty read on each thesis's cover page (page 1 of the
+// official PDF, archive/specialites/page_de_garde.py). Specialty = the jury president's, from the official
+// list; it wins over the These2.0 label. Names fill president/rapporteur only where These2.0 has none.
+const FMPM_COVER = { file: 'archive/fmpm/theses-fmpm-page-de-garde.csv', match: /^theses-fmpm-page-de-garde\.csv$/ };
 // Official FMPM specialty list (archive/specialites/liste-specialites-fmpm-2024.pdf) and the table that
 // maps each source's own label (These2.0 category, Fès spécialité, FMPR pharmacie thème) onto it.
 const SPE_TABLE = { file: 'archive/specialites/correspondance-specialites.csv', match: /^correspondance-specialites\.csv$/ };
@@ -600,9 +605,14 @@ function setDerived(rec) {
   rec.lang = t ? t.lang : '';
   rec.t2title = t ? t.title : '';
   if (rec.src === 'fmpm') { rec.rapp = t ? t.rapp : ''; rec.nR = norm(rec.rapp); }
+  const c = rec.cover;
+  if (c && !rec.pres && !rec.rapp) {                      // official cover page, where These2.0 has no jury
+    rec.pres = c.pres; rec.rapp = c.rapp; rec.jury = c.jury; rec.nR = norm(rec.rapp);
+  }
   rec.cat = t ? t.cat : (rec.spec || rec.theme);
   const m = rec.cat ? SPE_MAP.get(`${SPE_SRC[rec.src]}|${norm(rec.cat)}`) : null;
   rec.spe = m ? m.spe : ''; rec.opt = m ? m.opt : ''; rec.speNote = m ? m.rem : '';
+  if (c && c.spe) { rec.spe = c.spe; rec.opt = c.opt; rec.speNote = `page de garde : ${c.rule}${c.presT ? ` — président : ${c.presT}` : ''}`; }
   rec.nP = norm(rec.spe); rec.nO = norm(rec.opt);
   rec.nJ = norm([rec.pres, rec.jury].join(' ; '));
   rec.nK = norm(rec.kw);
@@ -633,6 +643,22 @@ function mergeT2(rows) {
       id: r['Identifiant These2.0'], title: t, lang: r['Langue'] || '',
       cat: /not classed|not available/i.test(cat) ? '' : cat, catPath: r['Catégorie'] || '',
       pres: r['Président'] || '', rapp: r['Rapporteur'] || '', jury: r['Jury'] || '', kw: r['Mots-clés'] || ''
+    };
+    n++;
+  }
+  return n;
+}
+
+function mergeCover(rows) {
+  const byKey = new Map(DB.filter(r => r.src === 'fmpm').map(r => [`${r.year}-${+r.num}`, r]));
+  let n = 0;
+  for (const r of rows) {
+    const rec = byKey.get(`${+r['Année']}-${+r['N°']}`);
+    if (!rec || !(r['Spécialité FMPM'] || r['Président'])) continue;
+    rec.cover = {
+      spe: r['Spécialité FMPM'] || '', opt: r['Option FMPM'] || '', rule: r['Règle'] || '',
+      pres: r['Président'] || '', presT: r['Titre du président'] || '', rapp: r['Rapporteur'] || '',
+      jury: (r['Autres membres du jury'] || '').replace(/ \([^)]*\)/g, '')
     };
     n++;
   }
@@ -683,19 +709,20 @@ async function fetchText(path) {
 async function loadAll() {
   const t0 = performance.now();
   const opt = f => f ? fetchText(f).then(parseCSV).catch(() => null) : null;   // in parallel; absent = fine
-  const t2 = opt(T2_FMPM.file), fesSpec = opt(FES_SPEC.file), speTable = opt(SPE_TABLE.file);
+  const t2 = opt(T2_FMPM.file), fesSpec = opt(FES_SPEC.file), speTable = opt(SPE_TABLE.file), cover = opt(FMPM_COVER.file);
   await Promise.all(SOURCES.map(async s => {
     try { addRecords(s, parseCSV(await fetchText(s.file))); }
     catch (e) { loaded[s.id] = e; }
   }));
-  applyLayers(await fesSpec, await speTable, await t2);
+  applyLayers(await fesSpec, await speTable, await t2, await cover);
   afterLoad(performance.now() - t0);
 }
 
-let fesSpecCount = 0;
-function applyLayers(fesSpecRows, speRows, t2RowsIn) {
+let fesSpecCount = 0, coverCount = 0;
+function applyLayers(fesSpecRows, speRows, t2RowsIn, coverRows) {
   if (speRows) loadSpeTable(speRows);
   if (fesSpecRows && typeof loaded.fmpdf === 'number') fesSpecCount = mergeFesSpec(fesSpecRows);
+  if (coverRows && typeof loaded.fmpm === 'number') coverCount = mergeCover(coverRows);
   applyT2Rows(t2RowsIn);
   DB.forEach(setDerived);
 }
@@ -767,7 +794,7 @@ async function loadFromFiles(fileList) {
   pickedFesFull = files.find(f => FES_FULL.match.test(f.name)) || null;
   if (!SOURCES.some(s => typeof loaded[s.id] === 'number')) { toast('Aucun fichier theses-*.csv reconnu.'); return; }
   const pick = async m => { const f = files.find(f => m.match.test(f.name)); return f ? parseCSV(await f.text()) : null; };
-  applyLayers(await pick(FES_SPEC), await pick(SPE_TABLE), await pick(T2_FMPM));
+  applyLayers(await pick(FES_SPEC), await pick(SPE_TABLE), await pick(T2_FMPM), await pick(FMPM_COVER));
   afterLoad(performance.now() - t0);
 }
 
