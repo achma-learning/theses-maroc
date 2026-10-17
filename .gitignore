@@ -2,3 +2,4 @@ archive/fmpdf/*-complet.csv
 *.pdf
 *.zip
 !archive/specialites/*.pdf
+__pycache__/
