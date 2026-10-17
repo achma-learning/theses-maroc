@@ -242,7 +242,7 @@ def load_facts(path: Path = CLASSEMENT) -> dict[tuple[int, int], tuple[str, str]
 def classify_all(data: list[dict]) -> Counter:
     """Set specialite / groupe / specialiteSource (/ specialiteConfiance) on every record."""
     for t in data:
-        for k in ("specialite", "groupe", "specialiteSource", "specialiteConfiance"):
+        for k in ("specialite", "groupe", "specialiteSource", "specialiteConfiance", "specialiteCatalogue"):
             t.pop(k, None)
         # older runs wrote rapporteur guesses into the library field: undo, it belongs to the library
         if t.get("categorySource") == "rapporteur":
@@ -257,15 +257,15 @@ def classify_all(data: list[dict]) -> Counter:
         if f:
             t["specialite"], t["specialiteSource"] = f
 
-    # pass 1: library category
+    # pass 1: library category (kept in specialiteCatalogue even when pass 0 won: classer_fmpm.py compares them)
     for t in data:
-        if t.get("specialite"):
-            continue
         cat = t.get("category")
         if isinstance(cat, list) and len(cat) >= 3:
             s = split_catalogue(cat[-1], t.get("title", ""))
             if s:
-                t["specialite"], t["specialiteSource"] = s, "catalogue"
+                t["specialiteCatalogue"] = s
+                if not t.get("specialite"):
+                    t["specialite"], t["specialiteSource"] = s, "catalogue"
 
     # pass 2: rapporteur history
     hist: dict[str, Counter] = defaultdict(Counter)
