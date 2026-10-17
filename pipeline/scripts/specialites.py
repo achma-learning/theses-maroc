@@ -1,7 +1,10 @@
 """Classify every thesis into the OFFICIAL FMPM specialty list (docs/liste-des-specialites-fmpm.pdf:
 "Liste des spécialités — Faculté de Médecine et de Pharmacie Marrakech — option spécialité").
 
-Three passes, each flagged in `specialiteSource` so guesses stay visible:
+Pass 0, then three passes, each flagged in `specialiteSource` so guesses stay visible:
+  0. "page de garde" / "vérifiée" : archive/fmpm/theses-fmpm-specialites.csv (built in achma-learning/these by
+                    archive/specialites/classer_fmpm.py): specialty of the jury president read on the thesis
+                    cover page (status "confirmée"), or checked by hand ("vérifiée"). Facts, not guesses.
   1. "catalogue"  : the library category, mapped to the official name. Mixed library categories
                     ("Chirurgie", "Urologie-Nephrologie", "Neurologie"...) are split with title keywords.
   2. "rapporteur" : no library category, but the rapporteur's other theses point clearly to one
@@ -13,10 +16,12 @@ The library's own `category` field is never modified.
 """
 from __future__ import annotations
 
+import csv
 import math
 import re
 import unicodedata
 from collections import Counter, defaultdict
+from pathlib import Path
 
 # --------------------------------------------------------------------------- official list
 GROUPS = {
@@ -37,6 +42,9 @@ GROUPS = {
 }
 GROUP_OF = {s: g for g, specs in GROUPS.items() for s in specs}
 UNCLASSIFIED = "Non classée"
+
+CLASSEMENT = Path(__file__).resolve().parents[2] / "archive" / "fmpm" / "theses-fmpm-specialites.csv"
+FACT_STATUS = {"confirmée": "page de garde", "vérifiée": "vérifiée"}  # Statut -> specialiteSource
 
 TITLE_THRESHOLD = 0.9  # title-only cross-validation: ~82 % precision at 0.9 vs ~73 % at 0.6 (see CONTEXT.md)
 
@@ -206,6 +214,31 @@ class NaiveBayes:
 
 
 # --------------------------------------------------------------------------- main entry
+PDF_KEY = re.compile(r"these(\d+)-(\d{2})\.pdf", re.I)
+OFFICIAL_SPELLING = {"Anesthésie- Réanimation": "Anesthésie-Réanimation", "Pneumophtysiologie": "Pneumo-phtisiologie",
+                     "Chirurgie Vasculaire Périphirique": "Chirurgie vasculaire périphérique",
+                     "Analyses biologies médicales": "Analyses biologiques médicales",
+                     "Anatomie-pathologique": "Anatomie pathologique"}
+_BY_NORM = {norm(s).replace("-", " "): s for s in GROUP_OF}
+
+
+def load_facts(path: Path = CLASSEMENT) -> dict[tuple[int, int], tuple[str, str]]:
+    """{(year, n°): (specialty as spelled in GROUPS, source)} for the theses whose specialty is a fact."""
+    if not path.exists():
+        return {}
+    out = {}
+    with open(path, encoding="utf-8-sig", newline="") as f:
+        for r in csv.DictReader(f):
+            src = FACT_STATUS.get(r["Statut"])
+            spe = OFFICIAL_SPELLING.get(r["Spécialité FMPM"], r["Spécialité FMPM"])
+            spe = _BY_NORM.get(norm(spe).replace("-", " "), spe)
+            if src and spe:
+                if spe not in GROUP_OF:
+                    raise ValueError(f"{path.name}: unknown specialty {r['Spécialité FMPM']!r}")
+                out[(int(r["Année"]), int(r["N°"]))] = (spe, src)
+    return out
+
+
 def classify_all(data: list[dict]) -> Counter:
     """Set specialite / groupe / specialiteSource (/ specialiteConfiance) on every record."""
     for t in data:
@@ -216,8 +249,18 @@ def classify_all(data: list[dict]) -> Counter:
             t["category"] = None
         t.pop("categorySource", None)
 
+    # pass 0: cover page / manual check (theses-fmpm-specialites.csv)
+    facts = load_facts()
+    for t in data:
+        m = PDF_KEY.search(t.get("href") or "")
+        f = facts.get((2000 + int(m.group(2)), int(m.group(1)))) if m else None
+        if f:
+            t["specialite"], t["specialiteSource"] = f
+
     # pass 1: library category
     for t in data:
+        if t.get("specialite"):
+            continue
         cat = t.get("category")
         if isinstance(cat, list) and len(cat) >= 3:
             s = split_catalogue(cat[-1], t.get("title", ""))
@@ -227,7 +270,7 @@ def classify_all(data: list[dict]) -> Counter:
     # pass 2: rapporteur history
     hist: dict[str, Counter] = defaultdict(Counter)
     for t in data:
-        if t.get("specialiteSource") == "catalogue" and t.get("rapporteur"):
+        if t.get("specialiteSource") in ("catalogue", "page de garde", "vérifiée") and t.get("rapporteur"):
             hist[prof_key(t["rapporteur"])][t["specialite"]] += 1
     for t in data:
         if t.get("specialite") or not t.get("rapporteur"):
