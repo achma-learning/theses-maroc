@@ -9,6 +9,8 @@
   const slug = (s) => norm(s).replace(/[^a-z0-9]+/g, "-");
   const UNCLASSIFIED = "Non classée";
   const MAX_ROWS = 500;
+  // Folder holding stats/ and data/, relative to the page: "" for these2/dashboard.html, "../these2/" for visuals/.
+  const BASE = document.body.dataset.base || "";
 
   const table = (head, rows) => `<table><thead><tr>${head.map((h, i) => `<th class="${i ? "n" : ""}">${esc(h)}</th>`).join("")}</tr></thead><tbody>${
     rows.map((r) => `<tr>${r.map((c, i) => `<td class="${i && typeof c === "number" ? "n" : ""}">${esc(c)}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
@@ -26,14 +28,14 @@
     $("charts").innerHTML = sections.map((sec) => `<h2 id="${slug(sec)}">${esc(sec)}</h2>` +
       s.charts.filter((c) => c.section === sec).map((c) => {
         const live = window.Charts && Charts.render(c);
-        const png = `stats/${c.id}.png?v=${s.version}`;
-        const dl = `<a class="btn dl" href="${png}" data-light="${png}" data-dark="stats/${c.id}-dark.png?v=${s.version}" download="${c.id}.png" title="Télécharger le graphique matplotlib (PNG)">⬇ PNG</a>`;
+        const png = `${BASE}stats/${c.id}.png?v=${s.version}`;
+        const dl = `<a class="btn dl" href="${png}" data-light="${png}" data-dark="${BASE}stats/${c.id}-dark.png?v=${s.version}" download="${c.id}.png" title="Télécharger le graphique matplotlib (PNG)">⬇ PNG</a>`;
         return `
         <section class="chart">${live ? `
           <div class="viz"><h3>${esc(c.title)}</h3><div class="plot" aria-label="${esc(c.alt)}">${live.html}</div>
             <p class="hint">${esc(live.hint)}</p>${dl}</div>` : `
           <div class="viz"><a href="${png}" target="_blank" rel="noopener" title="Ouvrir en grand"><picture>
-              <source srcset="stats/${c.id}-dark.png?v=${s.version}" media="(prefers-color-scheme: dark)">
+              <source srcset="${BASE}stats/${c.id}-dark.png?v=${s.version}" media="(prefers-color-scheme: dark)">
               <img src="${png}" alt="${esc(c.alt)}" loading="lazy"></picture></a>${dl}</div>`}
           <details><summary>Voir les chiffres</summary><div class="scroll">${table(c.table.head, c.table.rows)}</div></details>
         </section>`;
@@ -98,9 +100,9 @@
   async function start() {
     try {
       const [s, d, st] = await Promise.all([
-        fetch("stats/stats.json", { cache: "no-cache" }).then((r) => r.json()),
-        fetch("data/theses.json", { cache: "no-cache" }).then((r) => r.json()),
-        fetch("data/status.json", { cache: "no-cache" }).then((r) => r.json()).catch(() => null),
+        fetch(BASE + "stats/stats.json", { cache: "no-cache" }).then((r) => r.json()),
+        fetch(BASE + "data/theses.json", { cache: "no-cache" }).then((r) => r.json()),
+        fetch(BASE + "data/status.json", { cache: "no-cache" }).then((r) => r.json()).catch(() => null),
       ]);
       if (st) {
         const day = (iso) => new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });

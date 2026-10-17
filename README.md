@@ -30,6 +30,7 @@ Deux scripts qui s'exécutent **sur** le catalogue officiel (https://wd.fmpm.uca
 Moteur de recherche et statistiques des ≈ 4 000 thèses de Marrakech, classées dans les 42 spécialités officielles de la FMPM (les classements devinés sont marqués « ? »). Fusionné ici depuis l'ancien dépôt `these2.0` (conservé en branche `old`).
 
 - **Site :** `these2/index.html` (recherche) et `these2/dashboard.html` (graphiques cliquables).
+- **Visuels :** [`visuals/`](visuals/) — les mêmes graphiques, ouverts depuis le bouton 📊 de la page d'accueil (données lues dans `these2/`).
 - **Mise à jour hebdomadaire :** `.github/workflows/update-these2.yml`, chaque lundi 04:17 UTC, relit le site officiel de la FMPM ; données et graphiques ne sont réécrits que si le site a changé, sinon seule la date de contrôle (`these2/data/status.json`) est mise à jour. Lancement manuel : Actions → *Update These2.0 data* → Run workflow.
 - **À chaque visite :** les pages relisent `these2/data/*.json` sans cache (`cache: "no-cache"`), donc elles montrent toujours la dernière version publiée, avec « vérifié le … » (⚠ si le contrôle a plus de 9 jours). Le site officiel n'envoie pas d'en-tête CORS : un navigateur ne peut pas le relire lui-même, d'où le contrôle côté GitHub Actions.
 - **Code du pipeline :** `pipeline/scripts/` (Python : `update_theses.py`, `specialites.py`, `build_charts.py`) ; contexte détaillé : `pipeline/CONTEXT-these2.md`.

@@ -1,4 +1,4 @@
-# Publishes the whole repo root (index.html = archive search, these2/ = These2.0 FMPM) to GitHub Pages.
+# Publishes the whole repo root (index.html = archive search, these2/ = These2.0 FMPM, visuals/ = charts) to GitHub Pages.
 # One-time setup: repo Settings -> Pages -> Source: "GitHub Actions".
 # Files ignored on the site: big CSV zips etc. are not needed, so only the folders the pages read are copied.
 name: Deploy GitHub Pages
@@ -29,7 +29,7 @@ jobs:
         run: |
           mkdir _site
           cp index.html _site/
-          cp -r these2 archive userscripts _site/
+          cp -r these2 visuals archive userscripts _site/
           find _site/archive \( -name '*.zip' -o -name '*-backup.csv' -o -name '*.py' \) -delete
           touch _site/.nojekyll
       - uses: actions/configure-pages@v5
