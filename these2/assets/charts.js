@@ -94,14 +94,14 @@
       html: hbars(t.rows.map((r) => ({
         label: r[0], total: r[4], pick: { group: r[0] }, tip: `${r[0]} : ${fmt(r[4])} thèses`,
         segs: [1, 2, 3].map((k) => ({ v: r[k], cls: "s" + (k - 1), tip: `${r[0]} · ${t.head[k]} : ${fmt(r[k])}` })),
-      })), { labelW: 190, rowH: 34 }) + legend([["s0", "Page de garde ou bibliothèque"], ["s1", "Déduite du rapporteur"], ["s2", "Déduite du titre"]]),
+      })), { labelW: 190, rowH: 34 }) + legend([["s0", "Confirmée"], ["s1", "Probable"], ["s2", "À vérifier ou titre seul"]]),
       hint: "Clic sur une barre : thèses du groupe",
     }),
     "by-specialty": (t) => ({
       html: hbars(t.rows.map((r) => ({
         label: r[0], total: r[5], pick: { spec: r[0] }, tip: `${r[0]} (${r[1]}) : ${fmt(r[5])} thèses`,
         segs: [2, 3, 4].map((k) => ({ v: r[k], cls: r[0] === UNCLASSIFIED ? "cn" : "s" + (k - 2), tip: `${r[0]} · ${t.head[k]} : ${fmt(r[k])}` })),
-      }))) + legend([["s0", "Page de garde ou bibliothèque"], ["s1", "Déduite du rapporteur"], ["s2", "Déduite du titre"]]),
+      }))) + legend([["s0", "Confirmée"], ["s1", "Probable"], ["s2", "À vérifier ou titre seul"]]),
       hint: "Clic sur une barre : thèses de la spécialité",
     }),
     "specialty-heatmap": (t) => ({ html: heatmap(t.head, t.rows), hint: "Clic sur une case : spécialité et année" }),

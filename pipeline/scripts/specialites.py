@@ -2,9 +2,11 @@
 "Liste des spécialités — Faculté de Médecine et de Pharmacie Marrakech — option spécialité").
 
 Pass 0, then three passes, each flagged in `specialiteSource` so guesses stay visible:
-  0. "page de garde" / "vérifiée" : archive/fmpm/theses-fmpm-specialites.csv (built in achma-learning/these by
-                    archive/specialites/classer_fmpm.py): specialty of the jury president read on the thesis
-                    cover page (status "confirmée"), or checked by hand ("vérifiée"). Facts, not guesses.
+  0. "confirmée" / "vérifiée" / "probable" / "à vérifier" : archive/fmpm/theses-fmpm-specialites.csv (built in
+                    achma-learning/these by archive/specialites/classer_fmpm.py: one weighted vote of the jury read on
+                    the cover page, the library category and the title). Its Statut becomes specialiteSource:
+                    confirmée -> "confirmée", vérifiée (by hand) -> "vérifiée", probable / à vérifier = guesses.
+                    Passes 1-3 only run for theses that file doesn't cover yet (new ones).
   1. "catalogue"  : the library category, mapped to the official name. Mixed library categories
                     ("Chirurgie", "Urologie-Nephrologie", "Neurologie"...) are split with title keywords.
   2. "rapporteur" : no library category, but the rapporteur's other theses point clearly to one
@@ -44,7 +46,8 @@ GROUP_OF = {s: g for g, specs in GROUPS.items() for s in specs}
 UNCLASSIFIED = "Non classée"
 
 CLASSEMENT = Path(__file__).resolve().parents[2] / "archive" / "fmpm" / "theses-fmpm-specialites.csv"
-FACT_STATUS = {"confirmée": "page de garde", "vérifiée": "vérifiée"}  # Statut -> specialiteSource
+FACT_STATUS = {"confirmée": "confirmée", "vérifiée": "vérifiée", "probable": "probable", "à vérifier": "à vérifier"}  # Statut -> specialiteSource
+GUESSES = ("rapporteur", "titre", "probable", "à vérifier")
 
 TITLE_THRESHOLD = 0.9  # title-only cross-validation: ~82 % precision at 0.9 vs ~73 % at 0.6 (see CONTEXT.md)
 
@@ -223,7 +226,7 @@ _BY_NORM = {norm(s).replace("-", " "): s for s in GROUP_OF}
 
 
 def load_facts(path: Path = CLASSEMENT) -> dict[tuple[int, int], tuple[str, str]]:
-    """{(year, n°): (specialty as spelled in GROUPS, source)} for the theses whose specialty is a fact."""
+    """{(year, n°): (specialty as spelled in GROUPS, source)} from the final classification file."""
     if not path.exists():
         return {}
     out = {}
@@ -270,7 +273,7 @@ def classify_all(data: list[dict]) -> Counter:
     # pass 2: rapporteur history
     hist: dict[str, Counter] = defaultdict(Counter)
     for t in data:
-        if t.get("specialiteSource") in ("catalogue", "page de garde", "vérifiée") and t.get("rapporteur"):
+        if t.get("specialiteSource") in ("catalogue", "confirmée", "vérifiée") and t.get("rapporteur"):
             hist[prof_key(t["rapporteur"])][t["specialite"]] += 1
     for t in data:
         if t.get("specialite") or not t.get("rapporteur"):

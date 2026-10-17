@@ -86,8 +86,8 @@ def group(t: dict) -> str:
     return t.get("groupe") or UNCLASSIFIED
 
 
-SOURCES = [("catalogue", "Page de garde ou bibliothèque"), ("rapporteur", "Déduite du rapporteur"),
-           ("titre", "Déduite du titre")]
+SOURCES = [("catalogue", "Confirmée"), ("rapporteur", "Probable"), ("titre", "À vérifier ou titre seul")]
+BUCKET = {"confirmée": "catalogue", "vérifiée": "catalogue", "probable": "rapporteur", "à vérifier": "titre"}
 
 
 def design(title: str) -> str:
@@ -186,7 +186,7 @@ def build(json_path: Path, out: Path) -> dict:
     grp_src = defaultdict(Counter)  # group -> {source: n}
     for t in data:
         src = t.get("specialiteSource", "none")
-        src = "catalogue" if src in ("page de garde", "vérifiée") else src  # facts, drawn solid like the library
+        src = BUCKET.get(src, src)  # classer_fmpm.py statuses -> the 3 chart columns
         by_src[specialty(t)][src] += 1
         grp_src[group(t)][src] += 1
     specs = sorted(by_src, key=lambda s: (s == UNCLASSIFIED, -sum(by_src[s].values())))
@@ -270,7 +270,7 @@ def build(json_path: Path, out: Path) -> dict:
         [[s, group_of.get(s, UNCLASSIFIED)] + [by_src[s][k] for k, _ in SOURCES] + [sum(by_src[s].values())] for s in specs],
         lambda th: hbars(th, specs, [by_src[s]["catalogue"] + by_src[s]["none"] for s in specs],  # "none" = Non classée row
                          f"Répartition par spécialité officielle ({len(classified)} / 42)",
-                         "Plein = page de garde (président du jury) ou catégorie du catalogue · rapporteur / titre = déduction automatique (hachures)",
+                         "Plein = confirmée (≥ 2 sources d'accord : jury de la page de garde, catalogue, titre) · hachures = probable / à vérifier",
                          extras=src_extras(specs, by_src), main_label=SOURCES[0][1], neutral=(UNCLASSIFIED,)))
 
     add("specialty-heatmap", "Thématiques", "Spécialités × années (top 15)",

@@ -13,8 +13,10 @@
   const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   // official FMPM specialty (scripts/specialites.py); "rapporteur" / "titre" sources are automatic guesses
   const specOf = (t) => t.specialite || UNCLASSIFIED;
-  const isGuess = (t) => t.specialiteSource === "rapporteur" || t.specialiteSource === "titre";
-  const guessTitle = (t) => t.specialiteSource === "titre"
+  const isGuess = (t) => ["rapporteur", "titre", "probable", "à vérifier"].includes(t.specialiteSource);
+  const guessTitle = (t) => t.specialiteSource === "probable" ? "Spécialité probable (jury, catalogue et titre pas tous d'accord)"
+    : t.specialiteSource === "à vérifier" ? "Spécialité à vérifier (sources à égalité)"
+    : t.specialiteSource === "titre"
     ? `Spécialité déduite du titre${t.specialiteConfiance ? ` (confiance ${Math.round(t.specialiteConfiance * 100)} %)` : ""}`
     : "Spécialité déduite des autres thèses du rapporteur";
 

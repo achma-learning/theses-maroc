@@ -111,7 +111,7 @@
       renderCharts(s);
       ROWS = d.data.map((t) => {
         const spec = t.specialite || UNCLASSIFIED;
-        const guess = t.specialiteSource === "titre" ? "déduite du titre" : t.specialiteSource === "rapporteur" ? "déduite du rapporteur" : "";
+        const guess = { titre: "déduite du titre", rapporteur: "déduite du rapporteur", probable: "probable", "à vérifier": "à vérifier" }[t.specialiteSource] || "";
         return {
           year: t.year, ord: t.ord, title: t.title, author: t.author, rapporteur: t.rapporteur || "",
           href: t.href && t.href !== "not found" ? t.href : "", spec, guess, source: t.specialiteSource || "",
