@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>These2.0 FMPM</title>
+  <meta name="description" content="Rechercher les thèses de la Faculté de Médecine et de Pharmacie de Marrakech (FMPM), vérifiées chaque semaine sur le site officiel.">
+  <link rel="icon" href="assets/icon.png">
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+  <nav class="nav">
+    <a class="brand" href="./">These2.0</a>
+    <div class="links">
+      <a href="./" aria-current="page">Recherche</a>
+      <a href="dashboard.html">Dashboard</a>
+    </div>
+  </nav>
+  <main>
+    <h1>Thèses FMPM</h1>
+    <p class="sub" id="sub">Chargement des données…</p>
+
+    <div class="controls">
+      <input id="q" type="search" placeholder="Titre, auteur, mot-clé, professeur… (raccourci : /)" autocomplete="off" aria-label="Recherche">
+      <select id="year" aria-label="Année"><option value="">Année</option></select>
+      <select id="spec" aria-label="Spécialité"><option value="">Spécialité</option></select>
+      <select id="lang" aria-label="Langue">
+        <option value="">Langue</option>
+        <option value="fre">Français</option>
+        <option value="eng">Anglais</option>
+      </select>
+      <select id="sort" aria-label="Tri">
+        <option value="newest">Plus récentes</option>
+        <option value="oldest">Plus anciennes</option>
+        <option value="titleAsc">Titre A→Z</option>
+        <option value="authorAsc">Auteur A→Z</option>
+      </select>
+    </div>
+
+    <p class="meta" id="meta" aria-live="polite"></p>
+    <ol class="results" id="results"></ol>
+    <div class="pager" id="pager"></div>
+  </main>
+  <footer>
+    Sources : <a href="https://wd.fmpm.uca.ma/biblio/theses/Accueil.html">catalogue officiel FMPM</a> ·
+    <a href="https://lib.fmpm.uca.ma/lib/opac_css/">bibliothèque FMPM</a> ·
+    <a href="https://cdim.fmp-usmba.ac.ma/stats/dashboard_theses.php">thèses FMPDF Fès (site officiel)</a> ·
+    projet d'origine These2.0 par Akram Ammour
+  </footer>
+  <script src="assets/app.js"></script>
+</body>
+</html>
