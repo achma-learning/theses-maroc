@@ -16,8 +16,8 @@ Les données sont les listes que les facultés publient déjà (titre, auteur, a
 
 Deux scripts qui s'exécutent **sur** le catalogue officiel (https://wd.fmpm.uca.ma/biblio/theses/Accueil.html) et relisent toutes les années en direct :
 
-- [`userscripts/v0-stable.js`](userscripts/v0-stable.js) — barre de recherche en haut + export CSV brut (même code que la [version Greasy Fork](https://greasyfork.org/scripts/600588), installable en un clic).
-- [`userscripts/v0.1-diagrams.js`](userscripts/v0.1-diagrams.js) — la même barre en haut + **diagrammes dynamiques en pied de page** qui suivent la recherche : thèses par année, spécialités FMPM (médecine / chirurgie / biologie, un camembert par option), type d'étude, hôpitaux cités, titres en anglais, mots fréquents.
+- [`userscripts/v0-stable.js`](userscripts/v0-stable.js) — barre de recherche en haut + export CSV brut.
+- [`userscripts/v0.1-diagrams.js`](userscripts/v0.1-diagrams.js) — la même barre en haut + **diagrammes dynamiques en pied de page** qui suivent la recherche : thèses par année, spécialités FMPM (barres par option teintées par statut, comptage principal ou fractionnaire, carte spécialité × année), type d'étude, hôpitaux cités, titres en anglais, mots fréquents. **C'est la [version Greasy Fork](https://greasyfork.org/scripts/600588)**, synchronisée automatiquement depuis ce fichier (installable en un clic). Le dossier `userscripts/` est une copie identique de celui du dépôt `achma-learning/these`.
 
 **Lancer :** ouvrir le catalogue → **F12** → **Console** → coller tout le fichier → **Entrée** ; ou le coller comme nouveau script dans un gestionnaire de userscripts (Tampermonkey, Violentmonkey). Détails : [`userscripts/README.md`](userscripts/README.md).
 

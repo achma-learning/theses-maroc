@@ -27,7 +27,7 @@ Two sub-projects, deliberately separate:
   - `https://wd.fmpm.uca.ma/biblio/theses/annee-htm/<YEAR>.htm`: official list (year, n°, author, title, PDF). Source of truth for *which* theses exist. **It sends no CORS header**, so browsers on github.io can't read it: updates must happen server-side (GitHub Actions) or through the userscript.
   - `https://lib.fmpm.uca.ma/lib/opac_css/`: PMB library OPAC, used for president / rapporteur / jury / library category / keywords.
 - **Official specialty list:** `vercel-page/docs/liste-des-specialites-fmpm.pdf` (42 specialties in 3 groups: médecine 23, chirurgie 14, biologie 5). Transcribed in `specialites.py: GROUPS`.
-- **Userscript (companion):** greasyfork #600588 "FMPM thèses — recherche en ligne + export CSV" (namespace github.com/achma-learning/these). It runs ON wd.fmpm.uca.ma (no CORS issue). Its "Exporter CSV brut" output is the fallback data source (§6).
+- **Userscript (companion):** greasyfork #600588 "FMPM thèses — recherche en ligne + diagrammes", synced automatically from this repo's public `userscripts/v0.1-diagrams.js` (identical copy of achma-learning/these `userscripts/`; the CSV export lives in `v0-stable.js`, same folder). It runs ON wd.fmpm.uca.ma (no CORS issue). Its "Exporter CSV brut" output is the fallback data source (§6).
 - **Inspiration (Fès faculty, FMPDF):** `cdim.fmp-usmba.ac.ma/stats/dashboard_theses.php` and `.../cartographie_2025/cartographie-theses.html`. Linked in every footer.
 
 ## 4. Code Map
