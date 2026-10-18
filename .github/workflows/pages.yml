@@ -30,6 +30,7 @@ jobs:
           mkdir _site
           cp index.html _site/
           cp -r these2 visuals archive userscripts _site/
+          rm -rf _site/userscripts/tests # saved faculty pages + test runner: not for the site
           find _site/archive \( -name '*.zip' -o -name '*-backup.csv' -o -name '*.py' \) -delete
           touch _site/.nojekyll
       - uses: actions/configure-pages@v5

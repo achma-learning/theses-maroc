@@ -1,2 +1,5 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Saved pages of the faculty site: kept byte for byte (CRLF, windows-1252) for the userscript tests
+userscripts/tests/fixtures/** -text

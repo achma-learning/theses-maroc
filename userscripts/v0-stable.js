@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         FMPM thèses — recherche en ligne + export CSV
 // @namespace    https://github.com/achma-learning/these
-// @version      1.1.0
+// @version      1.2.0
 // @description  Ajoute une barre de recherche au catalogue officiel des thèses FMPM (toutes les années, lues en direct sur le site) et exporte le CSV brut pour mettre à jour la copie locale du dépôt.
 // @match        https://wd.fmpm.uca.ma/biblio/theses/*
 // @match        http://wd.fmpm.uca.ma/biblio/theses/*
@@ -34,6 +34,7 @@
   const PAUSE_MS = 400;
   const CACHE_KEY = 'fmpm-theses-cache-v2'; // v1 counted lines printed twice on the site
   const CACHE_TTL = 24 * 3600 * 1000;
+  const RETRY_TTL = 30 * 60 * 1000;                               // a load where a year failed: tried again after 30 min
   const MAX_SHOWN = 200;
   const HEADER = ['Année', 'N°', 'Auteur', 'Titre', 'PDF (texte intégral)', 'Article (résumé, 2006-2014)'];
 
@@ -83,32 +84,43 @@
     return out;
   }
 
-  function readCache() {
+  function readCache(anyAge) {
     try {
       const c = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null');
-      return c && Date.now() - c.at < CACHE_TTL ? c : null;
+      return c && (anyAge || Date.now() - c.at < (c.failed ? RETRY_TTL : CACHE_TTL)) ? c : null;
     } catch { return null; }
   }
   function writeCache(data) {
     try { localStorage.setItem(CACHE_KEY, JSON.stringify(data)); } catch { /* quota or blocked storage: run without cache */ }
   }
 
+  // A year that cannot be read keeps its rows from the previous load instead of vanishing from the results
+  // (and from the CSV export); such a load is marked `failed` and kept 30 min only. This year's page not yet
+  // online (404 in January) is not a failure.
   async function loadAll(force, onProgress) {
     const cached = !force && readCache();
     if (cached) return cached;
+    const prev = readCache(true);                                    // any age: stands in for a year that fails now
     const last = new Date().getFullYear();
     const rows = [], perYear = {};
+    let failed = 0;
     for (let y = last; y >= FIRST_YEAR; y--) {
       onProgress(`Lecture ${y}…`);
-      try {
-        const r = await fetchYear(y);
-        perYear[y] = r.status === 200 ? { theses: r.rows.length, sansPDF: r.rows.filter(x => !x.pdf).length,
-          nMax: Math.max(0, ...r.rows.map(x => +x.num)) } : `HTTP ${r.status}`;
+      let r;
+      try { r = await fetchYear(y); } catch (e) { r = { status: 0, error: e.message, rows: [] }; }
+      if (r.status === 200) {
+        perYear[y] = { theses: r.rows.length, sansPDF: r.rows.filter(x => !x.pdf).length, nMax: Math.max(0, ...r.rows.map(x => +x.num)) };
         rows.push(...r.rows);
-      } catch (e) { perYear[y] = 'erreur : ' + e.message; }
+      } else if (r.status === 404 && y === last) perYear[y] = 'pas encore en ligne (HTTP 404)';
+      else {
+        const old = prev ? prev.rows.filter(x => x.year === y) : [];
+        rows.push(...old);
+        failed++;
+        perYear[y] = (r.status ? `HTTP ${r.status}` : `erreur : ${r.error}`) + (old.length ? ` — copie précédente gardée (${old.length} thèses)` : ' — aucune copie');
+      }
       await sleep(PAUSE_MS);
     }
-    const data = { at: Date.now(), rows, perYear };
+    const data = { at: Date.now(), rows, perYear, failed };
     writeCache(data);
     return data;
   }
@@ -187,7 +199,8 @@
       s += `<a class="yr${y === PAGE_YEAR ? ' on' : ''}" href="${new URL(`${y}.htm`, BASE).href}">${y}</a>`;
     $('nav').innerHTML = s;
   }
-  // What the official list of this year says, and its oddities (numbers reused, one thesis under two numbers).
+  // What the official list of this year says, and its oddities: a N° given to two theses, and a line whose author +
+  // title repeat another N° (a copy error of the list: the N° is a real thesis, its PDF may be another one).
   function yearReport(rows) {
     const nums = rows.map(r => +r.num), max = Math.max(0, ...nums), have = new Set(nums);
     const byNum = new Map(), byThesis = new Map();
@@ -210,7 +223,7 @@
     $('yearinfo').innerHTML = `<b>${PAGE_YEAR}</b> : ${y.n} thèses en ligne, n° 1 à ${y.max}` +
       (y.missing > 0 ? ` — <span title="Numéros absents de la liste : thèses soutenues pas encore mises en ligne, ou numéros sautés">${y.missing} n° pas (encore) en ligne</span>` : '') +
       (y.shared.length ? ` · n° donné à deux thèses : ${y.shared.join(', ')}` : '') +
-      (y.twice.length ? ` · même thèse sous deux n° : ${y.twice.map(rs => `${esc(rs[0].author)} (${rs.map(r => r.num).join(', ')})`).join(' ; ')}` : '');
+      (y.twice.length ? ` · <span title="La liste officielle répète l'auteur et le titre d'un autre n° : erreur de copie probable. Chaque n° est une thèse ; ouvrir le PDF pour savoir laquelle.">même auteur et titre sous deux n°</span> : ${y.twice.map(rs => `${esc(rs[0].author)} (${rs.map(r => r.num).join(', ')})`).join(' ; ')}` : '');
   }
   // Labels in the official table: specialty (diagrams script) and warnings about the numbering.
   function annotatePage() {
@@ -230,7 +243,7 @@
       if (s) html += tag(`${s.spe}${s.st === 'confirmée' || s.st === 'vérifiée' ? '' : ' ?'}`, `Spécialité FMPM (classement achma-learning/theses-maroc) : ${s.st}${s.conf != null ? `, confiance ${Math.round(100 * s.conf)} %` : ''}`, '#dbe8fb');
       if (y.shared.includes(+num)) html += tag('⚠ n° partagé', `Le n° ${num} est donné à deux thèses différentes dans la liste officielle (même lien PDF)`, '#fde7c8');
       const other = twiceOf.get(`${num}|${who}`);
-      if (other) html += tag(`⚠ aussi n° ${other.join(', ')}`, 'La même thèse (auteur + titre) figure sous un autre numéro dans la liste officielle', '#fde7c8');
+      if (other) html += tag(`⚠ ligne répétée : n° ${other.join(', ')}`, 'Même auteur et même titre qu\'un autre n° dans la liste officielle : erreur de copie probable. Ce n° est une thèse à part entière ; son PDF peut être une autre thèse (2018-138, 2021-213 vérifiés).', '#fde7c8');
       if (html) cells[2].insertAdjacentHTML('beforeend', `<div class="fmpm-badges">${html}</div>`);
     }
   }
@@ -250,7 +263,9 @@
     DATA = d;
     INDEX = d.rows.map(r => ({ r, n: norm(`${r.author} ${r.title} ${r.year}`) }));
     const when = new Date(d.at).toLocaleString('fr-FR');
-    $('meta').textContent = `${d.rows.length} thèses lues sur le site officiel (${when}). Recherche sans accents ; tous les mots doivent être présents.`;
+    $('meta').textContent = `${d.rows.length} thèses lues sur le site officiel (${when})` +
+      (d.failed ? ` — ⚠ ${d.failed} année(s) non lue(s), copie précédente utilisée : voir « Thèses par année »` : '') +
+      '. Recherche sans accents ; tous les mots doivent être présents.';
     $('years').innerHTML = '<table><tr><th>Année</th><th>Thèses</th><th>Sans PDF</th><th>N° max</th></tr>' +
       Object.keys(d.perYear).sort((a, b) => b - a).map(y => {
         const v = d.perYear[y];
@@ -310,7 +325,8 @@
     $('meta').textContent = `Exporté : fmpm-officiel-brut-${d}.csv (${DATA.rows.length} lignes). Étape suivante : build_fmpm.py (voir archive/fmpm/methode/README.md).`;
   });
   document.addEventListener('keydown', e => {
-    if (e.key === '/' && !/INPUT|TEXTAREA/.test(document.activeElement?.tagName || '')) { e.preventDefault(); $('q').focus(); }
+    const t = e.composedPath()[0] || {};                             // the real target, even inside the shadow root
+    if (e.key === '/' && !/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName || '') && !t.isContentEditable) { e.preventDefault(); $('q').focus(); }
   });
 
   start(false);
