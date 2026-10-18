@@ -225,11 +225,17 @@ OFFICIAL_SPELLING = {"Anesthésie- Réanimation": "Anesthésie-Réanimation", "P
 _BY_NORM = {norm(s).replace("-", " "): s for s in GROUP_OF}
 
 
-def load_facts(path: Path = CLASSEMENT) -> dict[tuple[int, int], tuple[str, str]]:
-    """{(year, n°): (specialty as spelled in GROUPS, source)} from the final classification file."""
+def _person(name: str) -> str:
+    """Same person whatever the accents, case or word order (as update_theses.author_key)."""
+    return " ".join(sorted(re.findall(r"[a-z]+", norm(name or ""))))
+
+
+def load_facts(path: Path = CLASSEMENT) -> dict[tuple[int, int], dict[str, tuple[str, str]]]:
+    """{(year, n°): {author: (specialty as spelled in GROUPS, source)}} from the final classification file
+    (two authors under one number when the official list reuses it)."""
     if not path.exists():
         return {}
-    out = {}
+    out: dict[tuple[int, int], dict[str, tuple[str, str]]] = {}
     with open(path, encoding="utf-8-sig", newline="") as f:
         for r in csv.DictReader(f):
             src = FACT_STATUS.get(r["Statut"])
@@ -238,7 +244,7 @@ def load_facts(path: Path = CLASSEMENT) -> dict[tuple[int, int], tuple[str, str]
             if src and spe:
                 if spe not in GROUP_OF:
                     raise ValueError(f"{path.name}: unknown specialty {r['Spécialité FMPM']!r}")
-                out[(int(r["Année"]), int(r["N°"]))] = (spe, src)
+                out.setdefault((int(r["Année"]), int(r["N°"])), {})[_person(r["Auteur"])] = (spe, src)
     return out
 
 
@@ -254,9 +260,14 @@ def classify_all(data: list[dict]) -> Counter:
 
     # pass 0: cover page / manual check (theses-fmpm-specialites.csv)
     facts = load_facts()
+    # One thesis under a number: the PDF alone decides (older records spell authors differently).
+    # A number reused for two theses: pick the line of the same author, never the other thesis's.
     for t in data:
         m = PDF_KEY.search(t.get("href") or "")
-        f = facts.get((2000 + int(m.group(2)), int(m.group(1)))) if m else None
+        by_author = facts.get((2000 + int(m.group(2)), int(m.group(1)))) if m else None
+        if not by_author:
+            continue
+        f = next(iter(by_author.values())) if len(by_author) == 1 else by_author.get(_person(t.get("author", "")))
         if f:
             t["specialite"], t["specialiteSource"] = f
 

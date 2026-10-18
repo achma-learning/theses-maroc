@@ -217,6 +217,12 @@ def fetch_opac_year(year: int) -> dict[tuple[int, int], dict]:
 
 
 # ---------------------------------------------------------------- merge
+def author_key(name: str) -> str:
+    """Same person whatever the accents, case or word order ("IMANE EL OUAFRI" = "EL OUAFRI IMANE")."""
+    s = unicodedata.normalize("NFD", name or "").encode("ascii", "ignore").decode().lower()
+    return " ".join(sorted(re.findall(r"[a-z]+", s)))
+
+
 def make_record(row: dict, extra: dict | None) -> dict:
     extra = extra or {}
     jury = extra.get("jury") or []
@@ -305,14 +311,22 @@ def main() -> int:
     seed = json.loads(seed_path.read_text("utf-8"))["data"] if seed_path.exists() else []
     print(f"seed: {len(seed)} records from {seed_path}")
 
+    # A thesis = year + number. The official list sometimes gives the same number to two different
+    # theses (2025-214, 2026-26/36/63, even with the same PDF link): the second one is kept in `shared`,
+    # keyed by year + number + author, instead of overwriting the first.
     by_key: dict[tuple[int, int], dict] = {}
+    shared: dict[tuple[int, int, str], dict] = {}
     for t in seed:
         sanitize(t)
         if isinstance(t.get("ord"), int) and isinstance(t.get("year"), int):
             t.setdefault("president", ""); t.setdefault("rapporteur", ""); t.setdefault("jury", [])
             t["href"] = t.get("href", "not found").replace("http://", "https://")
-            by_key[(t["year"], t["ord"])] = t
-    unkeyed = [t for t in seed if (t.get("year"), t.get("ord")) not in by_key]
+            k = (t["year"], t["ord"])
+            if k in by_key and author_key(by_key[k]["author"]) != author_key(t["author"]):
+                shared[(*k, author_key(t["author"]))] = t
+            else:
+                by_key[k] = t
+    unkeyed = [t for t in seed if not (isinstance(t.get("ord"), int) and isinstance(t.get("year"), int))]
 
     this_year = dt.date.today().year
     official: list[dict] = []
@@ -332,6 +346,12 @@ def main() -> int:
         print("official site unreachable and no userscript CSV: keeping the current file untouched", file=sys.stderr)
         return 1
 
+    # Same line printed twice on the official page (2023-125, 2025-329) = one thesis.
+    seen: set[tuple[int, int, str]] = set()
+    official = [r for r in official if not ((r["year"], r["ord"], author_key(r["author"])) in seen
+                                            or seen.add((r["year"], r["ord"], author_key(r["author"]))))]
+    reused = {k for k, n in Counter((r["year"], r["ord"]) for r in official).items() if n > 1}
+
     # Which years need OPAC details: theses we don't know yet, or known ones with no rapporteur
     # in the last 3 years (the library often catalogues a thesis weeks after it is published).
     need_opac = sorted({r["year"] for r in official
@@ -347,6 +367,15 @@ def main() -> int:
     for row in official:
         key = (row["year"], row["ord"])
         old = by_key.get(key)
+        if key in reused and old is not None and author_key(old["author"]) != author_key(row["author"]):
+            # another thesis with the same number: its own record (no OPAC details, the number is ambiguous there)
+            k2 = (*key, author_key(row["author"]))
+            if k2 not in shared:
+                shared[k2] = make_record(row, None)
+                added += 1
+            elif row["href"]:
+                shared[k2]["href"] = row["href"]
+            continue
         if old is None:
             by_key[key] = make_record(row, opac.get(key))
             added += 1
@@ -361,7 +390,7 @@ def main() -> int:
             by_key[key] = fresh
             enriched += 1
 
-    data = sorted(by_key.values(), key=lambda t: (t["year"], t["ord"])) + unkeyed
+    data = sorted([*by_key.values(), *shared.values()], key=lambda t: (t["year"], t["ord"], author_key(t["author"]))) + unkeyed
     sources = classify_all(data)
     if len(data) < 0.9 * len(seed):
         print(f"refusing to write: {len(data)} records vs {len(seed)} before", file=sys.stderr)

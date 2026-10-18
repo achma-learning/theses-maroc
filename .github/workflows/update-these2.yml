@@ -1,11 +1,12 @@
-# Weekly check of https://wd.fmpm.uca.ma/biblio/theses/Accueil.html (+ lib.fmpm.uca.ma for jury).
+# Daily check of https://wd.fmpm.uca.ma/biblio/theses/Accueil.html (+ lib.fmpm.uca.ma for jury).
 #
 # update_theses.py rebuilds the dataset from the sources and compares it with these2/data/theses.json:
 # identical -> "changed=false", the data file is untouched and the charts are NOT redrawn.
 # Different -> new JSON + matplotlib charts in these2/.
-# these2/data/status.json (date of the last check) is committed every week: the site shows
-# "vérifié le …", and the commit counts as repo activity so GitHub never disables this schedule.
-# The commit is a push to main -> pages.yml republishes the site.
+# Commits: only when the data changed, plus these2/data/status.json (date of the last check, shown as
+# "vérifié le …") on Mondays and on manual runs; quiet days commit nothing. A push -> pages.yml republishes.
+# GitHub disables a scheduled workflow after 60 days without repo activity: the Monday commit is activity,
+# and every scheduled run also re-enables this workflow through the API (keep-alive step).
 #
 # Faculty server blocking GitHub's runners? Export the CSV with the FMPM userscript
 # (userscripts/v0-stable.js, "Exporter CSV brut") and commit it as pipeline/official-export.csv.
@@ -13,7 +14,7 @@ name: Update These2.0 data
 
 on:
   schedule:
-    - cron: "17 4 * * 1" # every Monday, 04:17 UTC
+    - cron: "17 4 * * *" # every day, 04:17 UTC (05:17 in Morocco)
   workflow_dispatch:
     inputs:
       redraw_charts:
@@ -23,7 +24,7 @@ on:
 
 permissions:
   contents: write
-  actions: write # lets this job start pages.yml (pushes made with GITHUB_TOKEN do not)
+  actions: write # lets this job start pages.yml (pushes made with GITHUB_TOKEN do not) + keep-alive
 
 concurrency:
   group: update-these2
@@ -54,17 +55,24 @@ jobs:
 
       - name: Commit
         id: commit
+        env:
+          CHANGED: ${{ steps.data.outputs.changed }}
+          EVENT: ${{ github.event_name }}
+          BRANCH: ${{ github.ref_name }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add these2/data these2/stats
-          if git diff --cached --quiet; then
-            echo "Nothing to commit"
-          elif [ "${{ steps.data.outputs.changed }}" = "true" ]; then
-            git commit -m "data: official site changed, refresh $(date -u +%F)" && git push
-            echo "pushed=true" >> "$GITHUB_OUTPUT"
+          if [ "$CHANGED" = "true" ]; then
+            git add these2/data these2/stats
+            git commit -m "data: official site changed, refresh $(date -u +%F)"
+          elif [ "$(date -u +%u)" = "1" ] || [ "$EVENT" = "workflow_dispatch" ]; then
+            git add these2/data/status.json these2/stats
+            git diff --cached --quiet || git commit -m "data: weekly check $(date -u +%F), no change"
           else
-            git commit -m "data: weekly check $(date -u +%F), no change" && git push
+            echo "No change today: nothing committed (status.json is committed on Mondays)"
+          fi
+          if [ -n "$(git log "origin/$BRANCH..HEAD" --oneline)" ]; then
+            git pull --rebase --autostash origin "$BRANCH" && git push origin "HEAD:$BRANCH"
             echo "pushed=true" >> "$GITHUB_OUTPUT"
           fi
 
@@ -73,3 +81,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh workflow run pages.yml --ref main
+
+      - name: Keep the schedule alive
+        if: github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/update-these2.yml/enable"

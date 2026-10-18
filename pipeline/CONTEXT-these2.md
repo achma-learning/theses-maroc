@@ -2,7 +2,7 @@
 _Last synced: 2026-10-17 @ a2472c9 (branch `claude/sweet-wozniak-31fpwg`: final FMPM classification as pass 0, `reclassify.py`). §2-§3 and part of §4/§6 still use the old `github-page/` / `vercel-page/` paths — now `these2/` and `pipeline/scripts/`._
 
 ## 1. What This Is (Plain English)
-- **In one sentence:** a search engine and a stats dashboard for the ~4,000 medical theses defended at the Marrakech faculty of medicine (FMPM). It checks the faculty's own website every week and updates itself when something changed.
+- **In one sentence:** a search engine and a stats dashboard for the ~4,000 medical theses defended at the Marrakech faculty of medicine (FMPM). It checks the faculty's own website every day and updates itself when something changed.
 - **Why it exists:** the official catalogue (wd.fmpm.uca.ma) is one plain HTML page per year with no search and no stats. These2.0 (by Akram Ammour) added search, but its data froze in June 2024. This repo makes it current again, adds charts like the Fès faculty dashboard, and sorts every thesis into the faculty's official specialty list.
 - **Who uses it:** public (med students, residents, faculty). Be careful with data accuracy; never invent thesis metadata, and always label guesses as guesses.
 - **Vibe:** polished personal tool, two deliverables in one repo.
@@ -13,7 +13,7 @@ Two sub-projects, deliberately separate:
 - **`vercel-page/`** = the original Next.js app, upgraded, **to send back to its author** so he updates his site. `cd vercel-page && npm install && npm run dev` → `http://localhost:3000`.
 - **Refresh the data by hand:** `pip install -r vercel-page/scripts/requirements.txt`, then `python vercel-page/scripts/update_theses.py` (about 1 min; prints "no change" if nothing moved), then `python vercel-page/scripts/build_charts.py`, then copy into github-page (exact commands in `README.md`).
 - **Deploy:** automatic.
-  - Every Monday at 04:17 UTC, `.github/workflows/update-data.yml` checks the sources. It redraws the charts and copies them only if the data changed; on quiet weeks it commits just `status.json`.
+  - Every day at 04:17 UTC, `.github/workflows/update-data.yml` checks the sources. When the data changed it commits the data + redrawn charts the same day; on quiet days it commits nothing, except `status.json` on Mondays and on manual runs.
   - `.github/workflows/pages.yml` publishes `github-page/` (Pages source must be "GitHub Actions").
   - Vercel: project Root Directory = `vercel-page`, redeploys on push. Live: <https://thesefmpm3.vercel.app/search> (ours), <https://thesefmpm.vercel.app/> (Akram's original), <https://achma-learning.github.io/these2.0/github-page/> (Pages).
   - Manual run: Actions → Update data → Run workflow. Tick "redraw_charts" after editing `build_charts.py`.
@@ -65,7 +65,8 @@ Two sub-projects, deliberately separate:
 - **Change detection = output diff.** `update_theses.py` rebuilds everything and compares `canonical(data)` with the committed file. Unchanged means the file (and its `lastFetched`) is left alone. Anything non-deterministic added to the data would make every week look "changed".
 - **Dynamic charts read `stats.json` tables, not `theses.json`.** They are only as fresh as the last pipeline run; a chart's numbers and its PNG always agree. A click filters from `theses.json`, so its count must equal the bar (checked: Pr M. BOUSKRAOUI 68, "traitement" 317, Pr L. ESSAADOUNI 236). If you change how `build_charts.py` counts something, change the matching filter in `dashboard.js`.
 - **Cache-busting:** chart PNGs keep the same file names, so pages append `?v=<stats.version>` (a hash of the data). Remove it and visitors may see last month's chart.
-- **Schedules die after 60 idle days** on public repos. The weekly `status.json` commit is what keeps the schedule alive; don't skip it to "reduce noise".
+- **Schedules die after 60 idle days** on public repos. Two guards, keep both: the Monday `status.json` commit (repo activity) and the « Keep the schedule alive » step (`gh api -X PUT …/actions/workflows/<file>/enable`, needs `permissions: actions: write`). GitHub also emails the owner before disabling; re-enable from the Actions tab.
+- **The official list reuses thesis numbers** (2025-214, 2026-26/36/63: two different theses, same N°, same PDF link) and prints some lines twice (2023-125, 2025-329). `update_theses.py` keys a thesis by year + N°, and by year + N° + author (`author_key`: accents, case and word order ignored) only when two authors share a number; `specialites.py` pass 0 then picks the classification line of the same author (`load_facts` keeps both).
 - **`pages.yml` uses `workflow_run`** because pushes made with `GITHUB_TOKEN` don't trigger other workflows. Don't "simplify" it to `push` only.
 - **Userscript CSV fallback:** `vercel-page/json/official-export.csv` (header `Année,N°,Auteur,Titre,PDF (texte intégral),…`, UTF-8 with BOM). Used only for years the site doesn't answer. Delete it once the site is reachable again, or it stays a silent backup with old rows.
 - **Encodings:** official pages are windows-1252 up to 2025 and UTF-8 from 2026; decode UTF-8 first, then fall back. The OPAC says ISO-8859-1 but sends cp1252 bytes, which `fix_c1()` repairs.
