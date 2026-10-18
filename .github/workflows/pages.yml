@@ -19,12 +19,12 @@ concurrency:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04 # pinned: ubuntu-latest becomes Ubuntu 26 from 2026-10-19; an unattended daily job should not switch OS by surprise
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Keep only what the pages read
         run: |
           mkdir _site
