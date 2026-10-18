@@ -1,0 +1,60 @@
+# Tests of the FMPM userscripts (userscripts/tests/run.js: Playwright + Chromium).
+#
+# Push / pull request touching userscripts/: offline tests — the faculty's pages saved in
+# userscripts/tests/fixtures/, clock simulated in 2026 then 2027. Red = a change broke a script.
+#
+# Every Monday (and on manual runs): the same, plus the real site (every past year readable, >= 3 900
+# theses, specialties file >= 3 500 classified) and a real thesis PDF in Chromium's PDF viewer with v2 loaded
+# as an extension. Red = the faculty site, the specialties file or Chromium changed: GitHub emails the
+# owner, and the log says which year or which check failed. Nothing is committed.
+#
+# GitHub disables a scheduled workflow after 60 days without repo activity: each scheduled run
+# re-enables it through the API (keep-alive step), like update-these2.yml.
+name: Userscripts
+
+on:
+  push:
+    branches: [main]
+    paths: ["userscripts/**", ".github/workflows/userscripts.yml"]
+  pull_request:
+    paths: ["userscripts/**", ".github/workflows/userscripts.yml"]
+  schedule:
+    - cron: "41 5 * * 1" # Mondays 05:41 UTC; off the hour, GitHub delays :00 jobs
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write # keep-alive: re-enable this workflow
+
+concurrency:
+  group: userscripts-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04 # pinned: ubuntu-latest becomes Ubuntu 26 from 2026-10-19
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Playwright + Chromium
+        run: |
+          npm install -g playwright@1.56.1
+          playwright install --with-deps chromium
+
+      - name: Offline tests (saved pages, simulated 2026 and 2027)
+        run: node userscripts/tests/run.js
+
+      - name: Live tests (real site, real PDF in Chromium's viewer)
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        run: xvfb-run -a node userscripts/tests/run.js --only-live --pdf-live
+
+      - name: Keep the schedule alive
+        if: github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/userscripts.yml/enable"
