@@ -1,5 +1,5 @@
 # These2.0 (FMPM theses) — AI Context File
-_Last synced: 2026-10-17 @ 2525474 + branch `claude/zealous-ptolemy-v8xtxg` (interactive dashboard charts, live-site links)_
+_Last synced: 2026-10-17 @ a2472c9 (branch `claude/sweet-wozniak-31fpwg`: final FMPM classification as pass 0, `reclassify.py`). §2-§3 and part of §4/§6 still use the old `github-page/` / `vercel-page/` paths — now `these2/` and `pipeline/scripts/`._
 
 ## 1. What This Is (Plain English)
 - **In one sentence:** a search engine and a stats dashboard for the ~4,000 medical theses defended at the Marrakech faculty of medicine (FMPM). It checks the faculty's own website every week and updates itself when something changed.
@@ -34,9 +34,13 @@ Two sub-projects, deliberately separate:
 - `vercel-page/scripts/update_theses.py`: **the data pipeline, start here.**
   - Steps: seed (existing JSON) → official year pages (or the userscript CSV for years that fail) → OPAC enrichment for new or incomplete years → `classify_all` → compare with the file on disk.
   - Writes `json/file.json` only if the data changed, `json/status.json` always, and `changed=true|false` to `$GITHUB_OUTPUT`.
-- `vercel-page/scripts/specialites.py`: official list (`GROUPS`), library-category → official mapping with title-keyword splits (`split_catalogue`), the `OBVIOUS` keyword list, Naive Bayes (`NaiveBayes`), `classify_all`, and `cross_validate` (accuracy check).
-- `vercel-page/scripts/build_charts.py`: 10 matplotlib charts, written as `<id>.png` + `<id>-dark.png`, plus `stats.json` (chart list with tables, KPIs, specialty→group map, `version` hash).
-- `github-page/index.html` + `assets/app.js`: search (client-side over `data/theses.json`, URL-synced filters, "?" chips for guessed specialties).
+- `pipeline/scripts/specialites.py`: official list (`GROUPS`), library-category → official mapping with title-keyword splits (`split_catalogue`), the `OBVIOUS` keyword list, Naive Bayes (`NaiveBayes`), `classify_all`, and `cross_validate` (accuracy check). `classify_all` passes:
+  - **pass 0** (`load_facts`, `CLASSEMENT`): `archive/fmpm/theses-fmpm-specialites.csv`, keyed by the PDF name `theseNN-YY` → year + N°. Built in `achma-learning/these` by `archive/specialites/classer_fmpm.py` (one weighted vote: rapporteur's cover label 3, president's 2, library category 2, title 0.5-2). Its `Statut` becomes `specialiteSource` (`FACT_STATUS`). It wins for every thesis it covers.
+  - **pass 1** library category: **always** stored in `specialiteCatalogue` (even when pass 0 won — `classer_fmpm.py` reads it back from `theses.json` as its library vote); sets `specialite` only if pass 0 didn't.
+  - passes 2-3 (rapporteur history ≥ 3 theses / ≥ 60 %, then title words + Naive Bayes) only for theses neither pass 0 nor 1 covers (new theses not yet in the file).
+- `pipeline/scripts/reclassify.py`: reruns `classify_all` on `these2/data/theses.json` **without re-reading the sites** (keeps `lastFetched`; prints "no change" if identical). Use after the classification CSV changed, then `build_charts.py`.
+- `pipeline/scripts/build_charts.py`: 10 matplotlib charts, written as `<id>.png` + `<id>-dark.png`, plus `stats.json` (chart list with tables, KPIs, specialty→group map, `version` hash). Specialty/group charts are stacked in 3 columns (`SOURCES` + `BUCKET`): **Confirmée** (confirmée, vérifiée, catalogue) / **Probable** (probable, rapporteur) / **À vérifier ou titre seul** (à vérifier, titre); same legend in `charts.js`.
+- `these2/index.html` + `these2/assets/app.js`: search (client-side over `data/theses.json`, URL-synced filters, "?" chips for guessed specialties: `isGuess` = rapporteur, titre, probable, à vérifier, with a tooltip saying why). `these2/assets/dashboard.js` marks the same guesses with « ? » in the table.
 - `github-page/assets/charts.js`: **interactive SVG charts**, drawn in the browser from the `table` of each chart in `stats.json` (no library). One renderer per chart id in `RENDER` (bars, stacked bars, heatmap, top-N lists); an id with no renderer falls back to its PNG. Hover tooltip, keyboard focus, click → `onPick`.
 - `github-page/dashboard.html` + `assets/dashboard.js`: fetches `stats.json`/`theses.json`/`status.json` with `cache: "no-cache"` on every visit, so charts update as soon as the Action commits new data (no PNG needed). A click on a mark (`applyPick`) filters the "Filtrage dynamique" table: year, group, specialty, city (title search), keyword (library tags), professor/rapporteur (same `prof_key` rule as `build_charts.py`). Bottom-right "⬇ PNG" button on each chart downloads the matplotlib PNG (dark one if the page is dark). Also CSV export and the "vérifié le" line.
 - `vercel-page/app/(routes)/dashboard/page.tsx`: same dashboard in Next (prerendered at build).
@@ -49,7 +53,8 @@ Two sub-projects, deliberately separate:
 - **Never edit or delete `these2.0-v1-original.zip`.**
 - Keep `github-page/` and `vercel-page/` independent: `vercel-page/` must work alone once copied to the author's repo. The Python scripts live in `vercel-page/scripts/`; github-page only receives copied output.
 - The JSON format is a contract with the Next app. New fields must be optional. **Never overwrite the library's `category`**; official classification goes in `specialite` / `groupe`.
-- **Every guess is flagged:** `specialiteSource` ∈ catalogue | rapporteur | titre. Shown as hatched bars on charts and "?" chips in the UI.
+- **Every guess is flagged:** `specialiteSource` ∈ **confirmée | vérifiée | probable | à vérifier** (pass 0, theses in `theses-fmpm-specialites.csv`) or **catalogue | rapporteur | titre** (theses not yet in that file). Guesses = probable, à vérifier, rapporteur, titre: hatched bars on charts and "?" chips in the UI. `specialiteCatalogue` = the library category's official mapping, kept for every thesis that has one.
+- **The classification CSVs come from `achma-learning/these`; never edit them here.** Public copies of `theses-fmpm-specialites.csv` and `theses-fmpm-page-de-garde.csv` have **no These2.0 column** (third-party data is not republished). Refresh: in `these`, `fetch_page1.py <csv> <dir> <tmp>` → `page_de_garde.py <dir>` → `classer_fmpm.py [theses.json]`; copy both CSVs here minus the These2.0 column; then `python pipeline/scripts/reclassify.py` and `python pipeline/scripts/build_charts.py --json these2/data/theses.json --out these2/stats`. Manual checks are made in `these` (`verifications-manuelles.csv`), never here.
 - **The pipeline must stay deterministic** (same sources → same bytes). Change detection relies on it: no timestamps or randomness inside `data`, sorted output, `metadata={"Software": None}` on PNGs.
 - Be polite to the faculty servers: `PAUSE_S = 1.0`, OPAC pages of 100, retries with backoff, no parallel requests. The user once stopped a 500-records-per-page OPAC query.
 - Charts: one series = one hue (`#2a78d6` light / `#3987e5` dark), always light + dark PNGs, "Non classée" in gray and last, the legend in its own row under stacked bars.
@@ -65,7 +70,7 @@ Two sub-projects, deliberately separate:
 - **Userscript CSV fallback:** `vercel-page/json/official-export.csv` (header `Année,N°,Auteur,Titre,PDF (texte intégral),…`, UTF-8 with BOM). Used only for years the site doesn't answer. Delete it once the site is reachable again, or it stays a silent backup with old rows.
 - **Encodings:** official pages are windows-1252 up to 2025 and UTF-8 from 2026; decode UTF-8 first, then fall back. The OPAC says ISO-8859-1 but sends cp1252 bytes, which `fix_c1()` repairs.
 - **OPAC collapsed notices:** each page lists 100 notices but renders ~5. The rest come from `ajax.php?module=expand_notice` (`img[param]` values joined by `|*|*|`, 40 per call). Records are matched by the PDF name `theseNN-YY`; records without it are skipped.
-- **Library lag:** the OPAC has had no category since 2024 and almost no 2025–2026 records, so recent theses rely on title guesses.
+- **Library lag:** the OPAC has had no category since 2024 and almost no 2025–2026 records. Recent theses now get their specialty from the cover-page vote (pass 0); only theses newer than the last `theses-fmpm-specialites.csv` fall back to title guesses.
 - **Classifier accuracy (5-fold cross-validation, title only, the worst case):** 65 % overall; at the 0.9 threshold it covers 61 % of theses with ~82 % precision. `TITLE_THRESHOLD = 0.9` on purpose: 0.6 gave ~73 % and visibly wrong labels.
 - **Rules in `split_catalogue` are heuristics:** library "Neurologie" mostly becomes Neurochirurgie (Marrakech has a big neurosurgery department), and "Chirurgie" is split by keywords. Médecine nucléaire currently has 0 theses.
 - **Vercel:** the file system is read-only, so `/api/renew-data` can't persist there. Use the Action instead.
@@ -80,11 +85,12 @@ Two sub-projects, deliberately separate:
   - Userscript CSV fallback.
   - Earlier the same day: split into `github-page/` + `vercel-page/`, Python pipeline (3,219 → 4,014 theses), 10 matplotlib charts, Pages deploy, backup zip. PR: achma-learning/these2.0#1.
 - **Shipped 2026-10-17:** interactive SVG dashboard (click → filters the table, "⬇ PNG" per chart), live-site links in README, Vercel deploy of `vercel-page/` (root directory = `vercel-page`). `vercel-page`'s own `/dashboard` still shows static PNGs.
-- **Working on now:** merge, enable Pages (Settings → Pages → Source: GitHub Actions), run "Update data" once by hand.
+- **Shipped 2026-10-17 (later):** repo merged into `achma-learning/theses-maroc` (`these2/` site, `pipeline/scripts/`, workflow `update-these2.yml`). **Final FMPM classification as pass 0**: every cover page of the 4 013 FMPM theses read in `these` (33 PDFs answer 404), one weighted vote → `theses.json` now confirmée 3 489 · probable 466 · à vérifier 47 · catalogue 7 · rapporteur 1 · titre 1 · 3 unclassified; dashboard shows 42/42 specialties. `reclassify.py`, `specialiteCatalogue` always stored, charts in 3 columns (Confirmée / Probable / À vérifier ou titre seul). `index.html` (all-faculties page) reads the same CSV (`statut:` field, facet, « ? »).
+- **Working on now:** the owner checks the 49 « à vérifier » theses by hand in `these`; then copy + `reclassify.py`.
 - **Next up:**
   1. Send `vercel-page/` to Akram Ammour (original author). Its Next "Categories" page still uses the library category; it could switch to `specialite`.
   2. Later, not now: also search FMPDF Fès theses (`https://cdim.fmp-usmba.ac.ma/e_theses/`, stats at `.../stats/`).
-  3. Maybe: read specialty and jury from PDF cover pages for the 197 unclassified and the 2025+ theses the library hasn't catalogued.
+  3. Each weekly run adds new theses that pass 0 doesn't cover yet (they fall back to catalogue / rapporteur / titre): rerun the `these` cover-page steps for them from time to time. 16 theses can't be resolved (PDF 404 and absent from the OPAC).
 
 ## 8. Update Protocol (Verbatim)
 > **For the AI Assistant:** When asked to "Update CONTEXT.md":
