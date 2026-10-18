@@ -15,7 +15,7 @@ Two sub-projects, deliberately separate:
 - **Deploy:** automatic.
   - Every Monday at 04:17 UTC, `.github/workflows/update-data.yml` checks the sources. It redraws the charts and copies them only if the data changed; on quiet weeks it commits just `status.json`.
   - `.github/workflows/pages.yml` publishes `github-page/` (Pages source must be "GitHub Actions").
-  - Vercel: project Root Directory = `vercel-page`, redeploys on push. Live: <https://these2-0.vercel.app/> (ours), <https://thesefmpm.vercel.app/> (Akram's original), <https://achma-learning.github.io/these2.0/github-page/> (Pages).
+  - Vercel: project Root Directory = `vercel-page`, redeploys on push. Live: <https://thesefmpm3.vercel.app/search> (ours), <https://thesefmpm.vercel.app/> (Akram's original), <https://achma-learning.github.io/these2.0/github-page/> (Pages).
   - Manual run: Actions → Update data → Run workflow. Tick "redraw_charts" after editing `build_charts.py`.
 - **Required env vars:** none.
 
