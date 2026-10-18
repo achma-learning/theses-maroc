@@ -372,7 +372,7 @@
     <a href="these2/">These2.0 FMPM</a> : recherche + tableau de bord des thèses de Marrakech, contrôlé chaque semaine sur le site officiel.
     Données : <code>archive/**/theses-*.csv</code> de ce site (sources et limites : <a href="archive/sources-theses-maroc.md">archive/sources-theses-maroc.md</a>).
     Les listes de Rabat sont en MAJUSCULES et souvent sans accents ; FMPM : copie du 17/10/2026 (4 013 thèses), les ajouts plus récents sont sur le site officiel ; Fès : liste complète 2007-2026, sans les résumés.
-    Spécialité FMPM : vote pondéré — spécialité du rapporteur et du président lues sur la page de garde du PDF officiel, catégorie de la bibliothèque, titre ; statut <code>confirmée</code>, <code>probable</code> ou <code>à vérifier</code> (les spécialités devinées sont marquées « ? »).
+    Spécialité FMPM : classement final (<code>archive/fmpm/theses-fmpm-specialites.csv</code>) — barycentre : chaque source pose une masse sur une spécialité (rapporteur 3, catégorie de la bibliothèque 2, président 1,5, titre 2 / 1 / 0,5, lus sur la page de garde du PDF officiel) ; l'option la plus lourde d'abord, puis la spécialité la plus lourde dans cette option — 93 bonnes réponses sur 113 thèses dont le service a été lu dans le PDF ; une thèse = une spécialité, avec sa confiance (part de la masse) et, si elle est proche, une spécialité secondaire ; statut <code>confirmée</code>, <code>probable</code> ou <code>à vérifier</code> (les spécialités devinées sont marquées « ? »).
     Jury et mots-clés des thèses FMPM 2006-2024 : lien « These2.0 » dans la fiche (site non officiel d'un étudiant).
     Vérifiez toujours un sujet sur <a href="https://toubkal.imist.ma/search" target="_blank" rel="noopener noreferrer">Toubkal</a> avant de le déposer.
   </footer>
@@ -622,12 +622,14 @@ function setDerived(rec) {
   const m = rec.cat ? SPE_MAP.get(`${SPE_SRC[rec.src]}|${norm(rec.cat)}`) : null;
   rec.spe = m ? m.spe : ''; rec.opt = m ? m.opt : ''; rec.speNote = m ? m.rem : '';
   if (c && c.spe) { rec.spe = c.spe; rec.opt = c.opt; rec.speNote = `page de garde : ${c.rule}${c.presT ? ` — président : ${c.presT}` : ''}`; }
-  rec.speStatus = ''; rec.speWhy = '';
+  rec.speStatus = ''; rec.speWhy = ''; rec.speConf = null; rec.speSec = ''; rec.speParts = '';
   const k = rec.cls;                                      // final classification (theses-fmpm-specialites.csv)
   if (k) {                                                // no specialty there → keep the fallback, marked « ? »
     if (k.spe) { rec.spe = k.spe; rec.opt = k.opt; }
     rec.speStatus = k.status; rec.speWhy = k.why + (!k.spe && rec.speNote ? ` ; à défaut : ${rec.speNote}` : '');
     rec.speNote = [k.status, k.why].filter(Boolean).join(' — ');
+    rec.speConf = k.conf; rec.speSec = k.sec;
+    rec.speParts = k.parts.length > 1 ? k.parts.map(([s, v]) => `${s} ${Math.round(100 * v)} %`).join(' · ') : '';
   }
   rec.nP = norm(rec.spe); rec.nO = norm(rec.opt); rec.nSt = norm(rec.speStatus);
   rec.nJ = norm([rec.pres, rec.jury].join(' ; '));
@@ -701,7 +703,9 @@ function mergeClass(rows) {
       how = `page de garde : ${who}${tit ? ' ' + tit : ''}${why ? ' ' + why : ''}`;
     }
     rec.cls = { spe: r['Spécialité FMPM'] || '', opt: r['Option FMPM'] || '', status,
-                why: [how, r['Raison (à vérifier)']].filter(Boolean).join(' ; ') };
+                why: [how, r['Raison (à vérifier)']].filter(Boolean).join(' ; '),
+                conf: r['Confiance'] ? +r['Confiance'] : null, sec: r['Spécialité secondaire'] || '',
+                parts: (r['Répartition'] || '').split('; ').filter(p => p.includes('=')).map(p => p.split('=')) };
     n++;
   }
   return n;
@@ -1214,7 +1218,7 @@ function openFiche(r) {
       ${row('N°', esc(r.num))}
       ${row('Code', r.code && highlight(r.code, terms))}
       ${row('Faculté', esc(`${s.fullName} — ${s.filiere}`))}
-      ${row('Spécialité FMPM', (r.spe || r.opt || r.speStatus) && `${r.spe ? spePivot(r) : '<em>non attribuée</em>'}${r.opt ? ` <span class="sep">·</span> ${pivot(optShort(r.opt), `option:${qv(optShort(r.opt))}`)}` : ''}${r.speStatus ? ` <span class="sep">·</span> ${pivot(r.speStatus, `statut:"${qv(r.speStatus)}"`, null, speGuess(r) ? 'pivot tag' : 'pivot')}${r.speWhy ? ` <span class="unoff">${esc(r.speWhy)}</span>` : ''}` : r.speNote ? ` <span class="unoff">${esc(r.speNote)}</span>` : ''}`)}
+      ${row('Spécialité FMPM', (r.spe || r.opt || r.speStatus) && `${r.spe ? spePivot(r) : '<em>non attribuée</em>'}${r.opt ? ` <span class="sep">·</span> ${pivot(optShort(r.opt), `option:${qv(optShort(r.opt))}`)}` : ''}${r.speStatus ? ` <span class="sep">·</span> ${pivot(r.speStatus, `statut:"${qv(r.speStatus)}"`, null, speGuess(r) ? 'pivot tag' : 'pivot')}${r.speConf != null ? ` <span class="sep">·</span> <span title="Part de la masse du barycentre sur cette spécialité">confiance ${Math.round(100 * r.speConf)} %</span>` : ''}${r.speSec ? ` <span class="sep">·</span> secondaire : ${pivot(r.speSec, `spe:"${qv(r.speSec)}"`)}` : ''}${r.speParts ? ` <span class="unoff">répartition : ${esc(r.speParts)}</span>` : ''}${r.speWhy ? ` <span class="unoff">${esc(r.speWhy)}</span>` : ''}` : r.speNote ? ` <span class="unoff">${esc(r.speNote)}</span>` : ''}`)}
       ${row('Catégorie source' + (r.t2 && r.t2.cat && fromT2(r) ? un : ''), r.cat && (catPivot(r) + (fromT2(r) && r.t2.catPath ? ` <span class="unoff">${esc(r.t2.catPath)}</span>` : '') + (!r.spe && !r.opt && r.speNote ? ` <span class="unoff">${esc(r.speNote)}</span>` : '')))}
       ${row('Langue' + un, esc(r.lang))}
       ${row('Président' + un, r.pres && people(r.pres, terms))}
@@ -1266,7 +1270,7 @@ function renderFacets() {
     (classCount ? col('Statut (spécialité)', topCounts(hits, r => r.speStatus ? [[qv(r.speStatus), r.speStatus]] : []), it => `statut:"${it.key}"`, 'FMPM seulement.') : '') +
     col('Rapporteurs / jury', topCounts(hits, r => r.people), it => personQuery(it.label), 'Aucun rapporteur dans ces listes.') +
     (t2State === 'on' ? col('Mots-clés', topCounts(hits, r => r.kws.map(k => [qv(k), k])), it => `motcle:"${it.key}"`, 'Mots-clés : FMPM 2006-2024 seulement (These2.0).') : '') +
-    `<p class="ext-note">Comptés sur les ${hits.length.toLocaleString('fr-FR')} résultats. Spécialités et options : <a href="archive/specialites/liste-specialites-fmpm-2024.pdf" target="_blank" rel="noopener noreferrer">liste officielle de la FMPM</a>, déduites du libellé de chaque source — ${classCount ? 'FMPM (classement final : page de garde, bibliothèque, titre — statut confirmée / probable / à vérifier ; <code>archive/fmpm/theses-fmpm-specialites.csv</code>), ' : t2State === 'on' ? 'FMPM (catégorie These2.0), ' : ''}Fès (spécialité CDIM), FMPR pharmacie (thème, rare) ; table : <code>archive/specialites/correspondance-specialites.csv</code>.
+    `<p class="ext-note">Comptés sur les ${hits.length.toLocaleString('fr-FR')} résultats. Spécialités et options : <a href="archive/specialites/liste-specialites-fmpm-2024.pdf" target="_blank" rel="noopener noreferrer">liste officielle de la FMPM</a>, déduites du libellé de chaque source — ${classCount ? 'FMPM (classement final : barycentre page de garde, bibliothèque, titre — statut confirmée / probable / à vérifier, une spécialité par thèse ; <code>archive/fmpm/theses-fmpm-specialites.csv</code>), ' : t2State === 'on' ? 'FMPM (catégorie These2.0), ' : ''}Fès (spécialité CDIM), FMPR pharmacie (thème, rare) ; table : <code>archive/specialites/correspondance-specialites.csv</code>.
       Rapporteurs : FMPR, Fès${t2State === 'on' ? ', FMPM (These2.0, + président et jury)' : ''}. Les noms sont regroupés sans titres ni initiales — un même professeur peut encore apparaître sous deux formes.</p>`;
 }
 function addToQuery(term) {
