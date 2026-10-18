@@ -1,10 +1,12 @@
 // ==UserScript==
 // @name         FMPM thèses — recherche en ligne + export CSV
 // @namespace    https://github.com/achma-learning/these
-// @version      1.0.0
+// @version      1.0.1
 // @description  Ajoute une barre de recherche au catalogue officiel des thèses FMPM (toutes les années, lues en direct sur le site) et exporte le CSV brut pour mettre à jour la copie locale du dépôt.
 // @match        https://wd.fmpm.uca.ma/biblio/theses/*
 // @match        http://wd.fmpm.uca.ma/biblio/theses/*
+// @exclude      https://wd.fmpm.uca.ma/biblio/theses/annee-htm/FT/*
+// @exclude      http://wd.fmpm.uca.ma/biblio/theses/annee-htm/FT/*
 // @grant        none
 // @license MIT
 // @run-at       document-idle
@@ -24,6 +26,7 @@
  */
 (function () {
   'use strict';
+  if (/\/annee-htm\/FT\//i.test(location.pathname)) return; // PDF texte intégral : laisser le lecteur PDF
   if (document.getElementById('fmpm-search-host')) return; // already injected
 
   const BASE = new URL('/biblio/theses/annee-htm/', location.href);
