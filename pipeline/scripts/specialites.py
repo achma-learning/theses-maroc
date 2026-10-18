@@ -3,7 +3,7 @@
 
 Pass 0, then three passes, each flagged in `specialiteSource` so guesses stay visible:
   0. "confirmée" / "vérifiée" / "probable" / "à vérifier" : archive/fmpm/theses-fmpm-specialites.csv (built in
-                    achma-learning/these by archive/specialites/classer_fmpm.py: one weighted vote of the jury read on
+                    achma-learning/these by archive/specialites/classer_fmpm.py: a two-step barycentre (option, then specialty) of the jury read on
                     the cover page, the library category and the title). Its Statut becomes specialiteSource:
                     confirmée -> "confirmée", vérifiée (by hand) -> "vérifiée", probable / à vérifier = guesses.
                     Passes 1-3 only run for theses that file doesn't cover yet (new ones).
