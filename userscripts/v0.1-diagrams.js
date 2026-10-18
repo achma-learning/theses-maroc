@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         FMPM thèses — recherche en ligne + diagrammes
 // @namespace    https://github.com/achma-learning/these
-// @version      0.1.2
-// @description  Barre de recherche en haut du catalogue officiel des thèses FMPM (toutes les années, lues en direct) et, en pied de page, des diagrammes dynamiques qui suivent la recherche : thèses par année, spécialités FMPM (médecine / chirurgie / biologie), type d'étude, hôpitaux cités, langue, mots fréquents.
+// @version      0.2.0
+// @description  Barre de recherche en haut du catalogue officiel des thèses FMPM (toutes les années, lues en direct) et, en pied de page, des diagrammes dynamiques qui suivent la recherche : thèses par année, spécialités FMPM (médecine / chirurgie / biologie, comptage principal ou fractionnaire, statut, carte spécialité × année), type d'étude, hôpitaux cités, langue, mots fréquents.
 // @match        https://wd.fmpm.uca.ma/biblio/theses/*
 // @match        http://wd.fmpm.uca.ma/biblio/theses/*
 // @exclude      https://wd.fmpm.uca.ma/biblio/theses/annee-htm/FT/*
@@ -23,6 +23,10 @@
  *    thèse) — fichier theses-fmpm-specialites.csv du dépôt public
  *    achma-learning/theses-maroc, chargé une fois (cache 24 h). Sans ce fichier, les autres
  *    diagrammes marchent quand même.
+ *  - Une thèse = une spécialité (la plus lourde du barycentre) : chaque diagramme totalise le vrai nombre de
+ *    thèses. Mode « Fractionnel » : chaque thèse vaut toujours 1 mais est répartie selon ses parts de masse
+ *    (colonne Répartition) — total inchangé. Teinte des barres = statut (confirmée / probable / à vérifier) ;
+ *    trait fin = fourchette « confirmées seules » → « + thèses où la spécialité est secondaire ».
  *  - Type d'étude, hôpitaux, langue : lus dans le TITRE (indicatif, pas une donnée officielle).
  * Installation : Tampermonkey/Violentmonkey (nouveau script → coller), ou F12 → Console → coller
  * tout le fichier sur https://wd.fmpm.uca.ma/biblio/theses/Accueil.html.
@@ -37,7 +41,7 @@
   const FIRST_YEAR = 2006;
   const PAUSE_MS = 400;
   const CACHE_KEY = 'fmpm-theses-cache-v1';
-  const SPE_KEY = 'fmpm-theses-spe-cache-v2'; // v1 = ancien fichier président du jury (551 classées)
+  const SPE_KEY = 'fmpm-theses-spe-cache-v3'; // v1 = ancien fichier président (551 classées) ; v2 = sans statut ni parts
   const CACHE_TTL = 24 * 3600 * 1000;
   const MAX_SHOWN = 200;
   const HEADER = ['Année', 'N°', 'Auteur', 'Titre', 'PDF (texte intégral)', 'Article (résumé, 2006-2014)'];
@@ -130,7 +134,8 @@
     return rows.filter(r => r.length > 1).map(r => Object.fromEntries(head.map((h, i) => [h, r[i] || ''])));
   }
 
-  // "année|n°" → { spe, opt, src } from the final classification (weighted vote, classer_fmpm.py).
+  // "année|n°" → { spe, opt, st, conf, sec, parts } from the final classification (barycentre, classer_fmpm.py).
+  // parts = [[spécialité, part de masse]…] (colonne Répartition), sec = spécialité secondaire (≥ 1/3 de la masse).
   async function loadSpecialties() {
     const cached = readCache(SPE_KEY);
     if (cached) return cached.map;
@@ -139,7 +144,10 @@
     const map = {};
     for (const r of parseCSV(await res.text())) {
       const spe = r['Spécialité FMPM'];
-      if (spe) map[`${r['Année']}|${r['N°']}`] = { spe, opt: r['Option FMPM'] || '', src: r['Statut'] || 'classée' };
+      if (!spe) continue;
+      const parts = (r['Répartition'] || '').split('; ').map(p => p.split('=')).filter(p => p.length === 2).map(([k, v]) => [k, +v]);
+      map[`${r['Année']}|${r['N°']}`] = { spe, opt: r['Option FMPM'] || '', st: r['Statut'] || 'classée',
+        conf: r['Confiance'] ? +r['Confiance'] : null, sec: r['Spécialité secondaire'] || '', parts: parts.length ? parts : [[spe, 1]] };
     }
     writeCache(SPE_KEY, { at: Date.now(), map });
     return map;
@@ -271,7 +279,15 @@
     .legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--ink); margin-top: 6px; }
     .legend span { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
     .legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
-    .pies { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin-top: 8px; }
+    .opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; margin-top: 10px; }
+    .opts h4 { font-size: 13.5px; margin: 0 0 4px; cursor: pointer; }
+    .opts h4 small { color: var(--muted); font-weight: 400; }
+    .seg { display: inline-flex; border: 1px solid var(--accent); border-radius: 6px; overflow: hidden; }
+    .seg button { border: 0; border-radius: 0; padding: 4px 10px; font-size: 12.5px; }
+    .seg button.on { background: var(--accent); color: var(--surface); }
+    .kpi { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12.5px; color: var(--ink2); margin: 6px 0 2px; font-variant-numeric: tabular-nums; }
+    .kpi b { color: var(--ink); }
+    .head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
     .words { display: flex; flex-wrap: wrap; gap: 6px; }
     .words button { padding: 2px 8px; font-size: 12.5px; }
     .tip { position: fixed; pointer-events: none; background: var(--ink); color: var(--surface); font-size: 12px;
@@ -298,9 +314,17 @@
         <div class="hero"><b id="h-total">0</b><span id="h-lbl">thèses au total</span><span class="ms" id="h-ms"></span></div>
         <p class="chart-title" id="h-title">Thèses par année — cliquez une barre pour filtrer l'année</p>
         <div class="bars" id="h-bars" role="list"></div><div class="axis" id="h-axis"></div></div>
-      <div class="card wide"><h3>Spécialités FMPM par année (médecine · chirurgie · biologie)</h3>
-        <p class="note">Classement final du dépôt (vote pondéré rapporteur / catégorie / président / titre, d'après la page de garde) — liste officielle des 42 spécialités FMPM. Clic sur une part = filtrer.</p>
-        <div id="c-opt"></div><div class="pies" id="c-pies"></div></div>
+      <div class="card wide"><div class="head"><h3>Spécialités FMPM par année (médecine · chirurgie · biologie)</h3>
+        <span class="seg" id="mode"><button data-mode="principal" class="on" title="Chaque thèse compte 1 pour sa spécialité principale">Principal</button><button data-mode="fractionnel" title="Chaque thèse vaut 1, réparti selon ses parts de masse (barycentre)">Fractionnel</button></span></div>
+        <p class="note" id="mode-note"></p>
+        <div class="kpi" id="c-kpi"></div>
+        <div id="c-opt"></div></div>
+      <div class="card wide"><h3>Spécialités, par option</h3>
+        <p class="note">Teinte = statut : <b>foncé</b> confirmée · <b>moyen</b> probable · <b>clair</b> à vérifier. <span id="range-note">Trait fin = fourchette : confirmées seules → + thèses où la spécialité est secondaire.</span> Clic = filtrer.</p>
+        <div class="opts" id="c-spe"></div></div>
+      <div class="card wide"><h3>Carte spécialité × année</h3>
+        <p class="note">Plus la case est foncée, plus il y a de thèses. Clic sur une case = filtrer spécialité + année ; sur un nom = la spécialité.</p>
+        <div id="c-heat"></div></div>
       <div class="card"><h3>Type d’étude</h3><p class="note">D’après le titre — indicatif. Une thèse peut compter dans plusieurs types.</p><div id="c-design"></div></div>
       <div class="card"><h3>Hôpitaux et villes cités</h3><p class="note">D’après le titre — indicatif.</p><div id="c-places"></div></div>
       <div class="card"><h3>Titres en anglais, par année</h3><p class="note">Part des titres rédigés en anglais (détection par mots-outils).</p><div id="c-lang"></div></div>
@@ -315,6 +339,8 @@
   let INDEX = [];
   let SPE = null, SPE_ERR = '';
   const FILTER = { year: null, spe: null, opt: null };
+  let MODE = 'principal';                                          // 'principal' | 'fractionnel'
+  let OPT_OF = {};                                                 // spécialité → option
 
   function setData(d) {
     DATA = d;
@@ -348,9 +374,11 @@
     const terms = norm($('q').value).split(' ').filter(Boolean);
     return terms.length ? INDEX.filter(x => terms.every(t => x.n.includes(t))).map(x => x.r) : DATA.rows;
   }
-  function filtered(rows) {
-    return rows.filter(r => (!FILTER.year || r.year === FILTER.year)
-      && (!FILTER.spe || speOf(r)?.spe === FILTER.spe) && (!FILTER.opt || speOf(r)?.opt === FILTER.opt));
+  // Spécialité filtrée : la principale ; en mode fractionnel, aussi la secondaire.
+  const hasSpe = (r, spe) => { const s = speOf(r); return !!s && (s.spe === spe || (MODE === 'fractionnel' && s.sec === spe)); };
+  function filtered(rows, skipYear) {
+    return rows.filter(r => (skipYear || !FILTER.year || r.year === FILTER.year)
+      && (!FILTER.spe || hasSpe(r, FILTER.spe)) && (!FILTER.opt || speOf(r)?.opt === FILTER.opt));
   }
 
   let lastMs = 0;
@@ -363,7 +391,7 @@
     $('chips').innerHTML = [
       FILTER.year && `<span class="chip" data-f="year">Année ${FILTER.year} ✕</span>`,
       FILTER.opt && `<span class="chip" data-f="opt">${esc(SHORT[FILTER.opt] || FILTER.opt)} ✕</span>`,
-      FILTER.spe && `<span class="chip" data-f="spe">${esc(FILTER.spe)} ✕</span>`,
+      FILTER.spe && `<span class="chip" data-f="spe">${esc(FILTER.spe)}${MODE === 'fractionnel' ? ' (+ secondaire)' : ''} ✕</span>`,
     ].filter(Boolean).join('');
     const raw = query.split(/\s+/);
     $('res').innerHTML = !active ? '' : `<li><em>${hits.length} résultat(s)${hits.length > MAX_SHOWN ? ` — ${MAX_SHOWN} premiers affichés` : ''}</em></li>` +
@@ -372,7 +400,7 @@
         return `<li>
         <div class="t">${highlight(r.title, raw)}</div>
         <div class="a">${r.year} · n° ${esc(r.num)} · ${highlight(r.author, raw)}
-          ${s ? ` · <span class="spe" title="Spécialité FMPM (${esc(s.src)})">${esc(s.spe)}</span>` : ''}
+          ${s ? ` · <span class="spe" title="${esc(speTip(s))}">${esc(s.spe)}${s.st === 'confirmée' || s.st === 'vérifiée' ? '' : ' ?'}</span>${s.sec ? ` <span class="spe" title="Spécialité secondaire (≥ 1/3 de la masse)">+ ${esc(s.sec)}</span>` : ''}` : ''}
           ${r.pdf ? ` · <a href="${esc(r.pdf)}" target="_blank" rel="noopener">PDF</a>` : ' · <em>sans PDF</em>'}
           ${r.article ? ` · <a href="${esc(r.article)}" target="_blank" rel="noopener">Résumé</a>` : ''}</div>
       </li>`;
@@ -384,7 +412,17 @@
   // ---- SVG charts ----------------------------------------------------------------------------
   const COLORS = ['var(--s1)', 'var(--s2)', 'var(--s3)', 'var(--s4)', 'var(--s5)', 'var(--s6)', 'var(--s7)', 'var(--s8)'];
   const OPT_COLOR = { [OPTIONS[0]]: COLORS[0], [OPTIONS[1]]: COLORS[1], [OPTIONS[2]]: COLORS[2] };
-  const fmt = n => n.toLocaleString('fr-FR');
+  const fmt = n => Math.round(n).toLocaleString('fr-FR');
+  const speTip = s => `${s.st}${s.conf != null ? ` · confiance ${Math.round(100 * s.conf)} %` : ''} · ` +
+    s.parts.map(([k, v]) => `${k} ${Math.round(100 * v)} %`).join(' · ');
+  // Contributions of one thesis: principal → [[spe, 1]] ; fractionnel → its mass shares (sum 1).
+  const contrib = r => { const s = speOf(r); return !s ? [] : MODE === 'fractionnel' ? s.parts : [[s.spe, 1]]; };
+  const wcount = (rows, key) => {
+    const m = new Map();
+    for (const r of rows) for (const [spe, w] of contrib(r)) { const k = key(r, spe); if (k != null) m.set(k, (m.get(k) || 0) + w); }
+    return m;
+  };
+  const STATUS_OP = { 'vérifiée': 1, 'confirmée': 1, 'probable': 0.55, 'à vérifier': 0.25 };
   const pct = (a, b) => b ? `${Math.round(100 * a / b)} %` : '—';
   const years = () => {
     const ys = DATA.rows.map(r => r.year);
@@ -463,29 +501,78 @@
     if (onClick) el.querySelectorAll('[data-k]').forEach(g => g.addEventListener('click', () => onClick(g.dataset.k)));
   }
 
-  // Donut: top 6 + « Autres » (part-to-whole at a glance), every specialty listed in the legend.
-  function donut(opt, rows) {
-    const c = [...count(rows, r => speOf(r)?.opt === opt ? speOf(r).spe : null)].sort((a, b) => b[1] - a[1]);
-    const total = c.reduce((s, [, v]) => s + v, 0);
-    const head = c.slice(0, 6), tail = c.slice(6);
-    const parts = head.map(([k, v], i) => ({ k, v, color: COLORS[i] }))
-      .concat(tail.length ? [{ k: `Autres (${tail.length})`, v: tail.reduce((s, [, v]) => s + v, 0), color: 'var(--other)', others: tail }] : []);
-    const R = 70, r = 42, cx = 80, cy = 80;
-    let a0 = -Math.PI / 2, s = `<svg viewBox="0 0 160 160" style="max-width:190px;margin:auto" role="img">`;
-    if (!total) s += `<circle cx="${cx}" cy="${cy}" r="${(R + r) / 2}" fill="none" stroke="var(--grid)" stroke-width="${R - r}"/>`;
-    for (const p of parts) {
-      const a1 = a0 + 2 * Math.PI * p.v / total, big = a1 - a0 > Math.PI ? 1 : 0;
-      const P = (rad, ang) => `${cx + rad * Math.cos(ang)},${cy + rad * Math.sin(ang)}`;
-      const d = parts.length === 1 ? `M${cx},${cy - R}A${R},${R} 0 1 1 ${cx - 0.01},${cy - R}L${cx - 0.01},${cy - r}A${r},${r} 0 1 0 ${cx},${cy - r}Z`
-        : `M${P(R, a0)}A${R},${R} 0 ${big} 1 ${P(R, a1)}L${P(r, a1)}A${r},${r} 0 ${big} 0 ${P(r, a0)}Z`;
-      const tip = p.others ? `${p.k} : ${p.others.map(([k, v]) => `${k} ${v}`).join(', ')}` : `${p.k} : ${fmt(p.v)} (${pct(p.v, total)})`;
-      s += `<g class="${p.others ? '' : 'hit'}" data-spe="${p.others ? '' : esc(p.k)}" data-tip="${esc(tip)}"><path class="mk" d="${d}" fill="${p.color}" stroke="var(--surface)" stroke-width="2"/></g>`;
-      a0 = a1;
+  // One option: ranked bars, segments shaded by status, thin range line (principal mode only).
+  function speBars(opt, rows) {
+    const items = new Map();
+    const item = k => items.get(k) || items.set(k, { v: 0, st: {}, sure: 0, sec: 0 }).get(k);
+    for (const r of rows) {
+      const s = speOf(r);
+      if (!s) continue;
+      for (const [spe, w] of contrib(r)) {
+        if (OPT_OF[spe] !== opt) continue;
+        const it = item(spe);
+        it.v += w; it.st[s.st] = (it.st[s.st] || 0) + w;
+        if (s.st === 'confirmée' || s.st === 'vérifiée') it.sure += w;
+      }
+      if (MODE === 'principal' && s.sec && s.sec !== s.spe && OPT_OF[s.sec] === opt) item(s.sec).sec++;
     }
-    s += `<text x="${cx}" y="${cy - 2}" text-anchor="middle" class="lab" style="font-size:16px;font-weight:600">${fmt(total)}</text>` +
-      `<text x="${cx}" y="${cy + 14}" text-anchor="middle">thèses</text></svg>`;
-    const legend = c.map(([k, v], i) => `<span data-spe="${esc(k)}" title="Filtrer"><i style="background:${i < 6 ? COLORS[i] : 'var(--other)'}"></i>${esc(k)} — ${fmt(v)}</span>`).join('');
-    return `<div><h3 style="text-align:center"><span class="hit" data-opt="${esc(opt)}" style="color:${OPT_COLOR[opt]}">●</span> ${esc(opt)}</h3>${s}<div class="legend">${legend || '<span class="note">Aucune thèse.</span>'}</div></div>`;
+    const list = [...items].filter(([, it]) => it.v > 0.004).sort((a, b) => b[1].v - a[1].v);
+    const total = list.reduce((a, [, it]) => a + it.v, 0), color = OPT_COLOR[opt];
+    const head = `<h4 data-opt="${esc(opt)}" title="Filtrer l'option"><span style="color:${color}">●</span> ${esc(SHORT[opt])} <small>${fmt(total)} thèses</small></h4>`;
+    if (!list.length) return `<div>${head}<p class="note">Aucune thèse.</p></div>`;
+    const W = 420, row = 20, lw = 168, vw = 62, H = list.length * row + 2;
+    const max = Math.max(...list.map(([, it]) => it.v + it.sec)), sx = v => (W - lw - vw) * v / max;
+    let svg = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img">`;
+    list.forEach(([k, it], i) => {
+      const y = i * row + 2;
+      let x = lw, marks = '';
+      for (const st of ['vérifiée', 'confirmée', 'probable', 'à vérifier']) {
+        const w = sx(it.st[st] || 0);
+        if (w <= 0) continue;
+        marks += `<rect class="mk" x="${x}" y="${y}" width="${Math.max(w - 1, 0.5)}" height="13" fill="${color}" fill-opacity="${STATUS_OP[st]}"/>`;
+        x += w;
+      }
+      if (MODE === 'principal' && (it.sec || it.sure < it.v)) {               // fourchette confirmées → + secondaires
+        const a = lw + sx(it.sure), b = lw + sx(it.v + it.sec), ym = y + 16.5;
+        marks += `<path d="M${a},${ym - 2}V${ym + 2}M${a},${ym}H${b}M${b},${ym - 2}V${ym + 2}" stroke="var(--ink2)" stroke-width="1" fill="none"/>`;
+      }
+      const st = Object.entries(it.st).map(([n, v]) => `${n} ${fmt(v)}`).join(', ');
+      const tip = `${k} : ${fmt(it.v)} (${pct(it.v, total)}) — ${st}` + (MODE === 'principal' ? ` · fourchette ${fmt(it.sure)}–${fmt(it.v + it.sec)}` : '');
+      svg += `<g class="hit" data-spe="${esc(k)}" data-tip="${esc(tip)}"><rect x="0" y="${y - 2}" width="${W}" height="${row}" fill="transparent"/>` +
+        `<text class="lab" x="${lw - 6}" y="${y + 10.5}" text-anchor="end"${FILTER.spe === k ? ' style="font-weight:700"' : ''}>${esc(k.length > 27 ? k.slice(0, 26) + '…' : k)}</text>` +
+        `${marks}<text x="${lw + sx(Math.max(it.v, MODE === 'principal' ? it.v + it.sec : 0)) + 5}" y="${y + 10.5}">${fmt(it.v)}</text></g>`;
+    });
+    return `<div>${head}${svg}</svg></div>`;
+  }
+
+  // Specialty × year heatmap, rows grouped by option and ranked by total.
+  function heatmap(el, rows, ys) {
+    const cell = wcount(rows, (r, spe) => `${spe}|${r.year}`), tot = wcount(rows, (r, spe) => spe);
+    const spes = OPTIONS.flatMap(o => [...tot].filter(([k, v]) => OPT_OF[k] === o && v > 0.004).sort((a, b) => b[1] - a[1]).map(([k]) => k));
+    if (!spes.length) { el.innerHTML = '<p class="note">Aucune thèse classée.</p>'; return; }
+    const W = Math.max(520, el.clientWidth || 900), lw = 190, top = 16, rh = 15;
+    const cw = (W - lw - 40) / ys.length, H = top + spes.length * rh + 2, max = Math.max(...cell.values());
+    let s = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img">`;
+    ys.forEach((y, j) => {
+      if (j % Math.ceil(ys.length * 30 / (W - lw)) === 0) s += `<text x="${lw + j * cw + cw / 2}" y="11" text-anchor="middle">${String(y).slice(2)}</text>`;
+    });
+    spes.forEach((k, i) => {
+      const y = top + i * rh, c = OPT_COLOR[OPT_OF[k]];
+      s += `<g class="hit" data-spe="${esc(k)}" data-tip="${esc(`${k} : ${fmt(tot.get(k))} thèses`)}"><text class="lab" x="${lw - 6}" y="${y + 11}" text-anchor="end">${esc(k.length > 30 ? k.slice(0, 29) + '…' : k)}</text></g>`;
+      ys.forEach((yr, j) => {
+        const v = cell.get(`${k}|${yr}`) || 0;
+        s += `<g class="hit" data-spe="${esc(k)}" data-year="${yr}" data-tip="${esc(`${k} · ${yr} : ${fmt(v)}`)}"><rect class="mk" x="${lw + j * cw + 0.5}" y="${y + 0.5}" width="${cw - 1}" height="${rh - 1}" rx="2"` +
+          (v ? ` fill="${c}" fill-opacity="${(0.1 + 0.9 * Math.sqrt(v / max)).toFixed(2)}"` : ' fill="var(--grid)" fill-opacity="0.35"') + '/></g>';
+      });
+      s += `<text x="${W - 34}" y="${y + 11}">${fmt(tot.get(k))}</text>`;
+    });
+    el.innerHTML = s + '</svg>';
+    el.querySelectorAll('[data-spe]').forEach(g => g.addEventListener('click', () => {
+      const y = g.dataset.year ? +g.dataset.year : null;
+      if (y) { FILTER.spe = g.dataset.spe; FILTER.year = FILTER.year === y && FILTER.spe === g.dataset.spe ? null : y; }
+      else FILTER.spe = FILTER.spe === g.dataset.spe ? null : g.dataset.spe;
+      search();
+    }));
   }
 
   // Big total + bars per year (ignores the year pin so it can be seen and changed), ticks every 5 years.
@@ -520,20 +607,29 @@
     heroChart(rows, query);
 
     if (SPE) {
-      const stacks = OPTIONS.map(o => ({ label: SHORT[o], color: OPT_COLOR[o], counts: count(rows, r => speOf(r)?.opt === o ? r.year : null) }))
+      F('mode-note').textContent = MODE === 'principal'
+        ? 'Une thèse = une spécialité : la plus lourde du barycentre (rapporteur 3, catégorie 2, président 1,5, titre 2/1/0,5 ; option puis spécialité). Les totaux = le vrai nombre de thèses.'
+        : 'Chaque thèse vaut 1, réparti selon ses parts de masse (ex. 0,7 médecine interne + 0,3 néphrologie) : total inchangé. Le filtre de spécialité inclut aussi les thèses où elle est secondaire.';
+      F('range-note').style.display = MODE === 'principal' ? '' : 'none';
+      const cls = rows.map(speOf).filter(Boolean), by = count(cls, s => s.st);
+      F('c-kpi').innerHTML = `<span><b>${fmt(rows.length)}</b> thèses</span><span><b>${fmt(cls.length)}</b> classées</span>` +
+        ['vérifiée', 'confirmée', 'probable', 'à vérifier'].filter(k => by.get(k)).map(k => `<span>${k} <b>${fmt(by.get(k))}</b></span>`).join('') +
+        `<span>avec spécialité secondaire <b>${fmt(cls.filter(s => s.sec).length)}</b></span>`;
+      const stacks = OPTIONS.map(o => ({ label: SHORT[o], color: OPT_COLOR[o], counts: wcount(rows, (r, spe) => OPT_OF[spe] === o ? r.year : null) }))
         .concat([{ label: 'non classées', color: 'var(--other)', counts: count(rows, r => speOf(r) ? null : r.year) }]);
       yearChart(F('c-opt'), ys, null, stacks, y => { FILTER.year = FILTER.year === y ? null : y; search(); });
       F('c-opt').insertAdjacentHTML('beforeend', `<div class="legend">${stacks.map(st => `<span><i style="background:${st.color}"></i>${st.label} — ${fmt([...st.counts.values()].reduce((a, b) => a + b, 0))}</span>`).join('')}</div>`);
-      F('c-pies').innerHTML = OPTIONS.map(o => donut(o, rows)).join('');
-      F('c-pies').querySelectorAll('[data-spe]').forEach(g => g.dataset.spe && g.addEventListener('click', () => {
+      F('c-spe').innerHTML = OPTIONS.map(o => speBars(o, rows)).join('');
+      F('c-spe').querySelectorAll('[data-spe]').forEach(g => g.addEventListener('click', () => {
         FILTER.spe = FILTER.spe === g.dataset.spe ? null : g.dataset.spe; search();
       }));
-      F('c-pies').querySelectorAll('[data-opt]').forEach(g => g.addEventListener('click', () => {
+      F('c-spe').querySelectorAll('[data-opt]').forEach(g => g.addEventListener('click', () => {
         FILTER.opt = FILTER.opt === g.dataset.opt ? null : g.dataset.opt; search();
       }));
+      heatmap(F('c-heat'), filtered(base, true), ys);
     } else {
       F('c-opt').innerHTML = `<p class="note">${SPE_ERR ? `Fichier des spécialités indisponible (${esc(SPE_ERR)}) : ` : 'Chargement des spécialités… '}${esc(SPE_URL)}</p>`;
-      F('c-pies').innerHTML = '';
+      F('c-spe').innerHTML = F('c-heat').innerHTML = F('c-kpi').innerHTML = '';
     }
 
     const t = rows.map(r => ` ${norm(r.title)} `);
@@ -599,6 +695,14 @@
   let rz;
   addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => DATA.rows.length && search(), 200); });
 
-  loadSpecialties().then(m => { SPE = m; }).catch(e => { SPE_ERR = e.message; }).finally(() => { if (DATA.rows.length) search(); });
+  F('mode').addEventListener('click', e => {
+    const m = e.target.dataset.mode;
+    if (!m || m === MODE) return;
+    MODE = m;
+    F('mode').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.mode === MODE));
+    search();
+  });
+
+  loadSpecialties().then(m => { SPE = m; OPT_OF = {}; for (const v of Object.values(m)) OPT_OF[v.spe] = v.opt; }).catch(e => { SPE_ERR = e.message; }).finally(() => { if (DATA.rows.length) search(); });
   start(false);
 })();
