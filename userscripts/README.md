@@ -5,7 +5,7 @@ Deux scripts qui s'exécutent **sur le site officiel** de la FMPM (https://wd.fm
 | Fichier | Version | Ce qu'il ajoute |
 |---|---|---|
 | [`v0-stable.js`](v0-stable.js) | 1.0.1 | Barre de recherche en haut (toutes les années, sans accents) + bouton **Exporter CSV brut** (pour `archive/fmpm/methode/build_fmpm.py`). Même code que la version publiée sur [Greasy Fork](https://greasyfork.org/scripts/600588) (= `archive/fmpm/methode/fmpm-recherche.user.js`). |
-| [`v0.1-diagrams.js`](v0.1-diagrams.js) | 0.1.2 | Tout v0 (barre **en haut**) + **diagrammes dynamiques en pied de page**, recalculés à chaque recherche. |
+| [`v0.1-diagrams.js`](v0.1-diagrams.js) | 0.2.0 | Tout v0 (barre **en haut**) + **diagrammes dynamiques en pied de page**, recalculés à chaque recherche. |
 
 ## Lancer un script
 
@@ -26,11 +26,15 @@ La barre reste en haut ; **📊 Diagrammes ↓** descend au pied de page, **↑ 
 | Diagramme | Ce qu'il montre | Source |
 |---|---|---|
 | **Thèses par année** | total, temps de calcul, une barre par année — clic = filtrer l'année (recliquer pour retirer) | site officiel |
-| **Spécialités FMPM par année** + 3 camemberts | barres empilées médecine / chirurgie / biologie / non classées ; un camembert par option (6 premières spécialités + « Autres »), toutes les spécialités listées dessous — clic = filtrer | classement final du dépôt (vote pondéré rapporteur / catégorie / président / titre, lu sur la page de garde), liste officielle des 42 spécialités FMPM |
+| **Spécialités FMPM par année** | barres empilées médecine / chirurgie / biologie / non classées ; ligne de chiffres (classées, confirmées, probables, à vérifier, avec spécialité secondaire) ; bouton **Principal / Fractionnel** | classement final du dépôt (barycentre en deux temps : option puis spécialité ; rapporteur 3, catégorie 2, président 1,5, titre 2/1/0,5), liste officielle des 42 spécialités FMPM |
+| **Spécialités, par option** | barres triées, une colonne par option ; teinte = statut (foncé confirmée, moyen probable, clair à vérifier) ; trait fin = fourchette « confirmées seules » → « + thèses où la spécialité est secondaire » — clic = filtrer | idem (colonnes `Statut`, `Spécialité secondaire`) |
+| **Carte spécialité × année** | 42 lignes × années, case plus foncée = plus de thèses — clic sur une case = spécialité + année | idem |
 | **Type d'étude** | expérience d'un service, rétrospective, prospective, à propos de cas, revue de la littérature, enquête… | titre (indicatif) |
 | **Hôpitaux et villes cités** | CHU Mohammed VI, Hôpital Militaire Avicenne, Ibn Tofail, Agadir, Safi… | titre (indicatif) |
 | **Titres en anglais, par année** | part des thèses de l'année au titre en anglais | titre (indicatif) |
 | **Mots les plus fréquents** | 24 mots des titres (hors mots vides et mots déjà cherchés) — clic = ajouter à la recherche | titre |
+
+**Une thèse = une spécialité.** Chaque diagramme totalise le vrai nombre de thèses (la spécialité la plus lourde du barycentre). En mode **Fractionnel**, chaque thèse vaut toujours 1 mais se répartit selon ses parts de masse (colonne `Répartition`, ex. 0,7 médecine interne + 0,3 néphrologie) : le total ne change pas, et le filtre de spécialité inclut aussi les thèses où elle est secondaire. Dans la liste des résultats, l'infobulle de la spécialité donne statut, confiance et parts ; « ? » = pas confirmée.
 
 ![v0.1-diagrams : diagrammes en pied de page, toutes les thèses](captures/v0.1-diagrams.png)
 
