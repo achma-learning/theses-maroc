@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         FMPM thèses — recherche en ligne + diagrammes
 // @namespace    https://github.com/achma-learning/these
-// @version      0.1.1
+// @version      0.1.2
 // @description  Barre de recherche en haut du catalogue officiel des thèses FMPM (toutes les années, lues en direct) et, en pied de page, des diagrammes dynamiques qui suivent la recherche : thèses par année, spécialités FMPM (médecine / chirurgie / biologie), type d'étude, hôpitaux cités, langue, mots fréquents.
 // @match        https://wd.fmpm.uca.ma/biblio/theses/*
 // @match        http://wd.fmpm.uca.ma/biblio/theses/*
@@ -18,8 +18,9 @@
  *  - EN BAS  : diagrammes SVG sans bibliothèque, recalculés à chaque recherche (toutes les thèses si
  *    la recherche est vide). Clic sur une barre d'année ou une part de camembert = filtre ; clic sur
  *    un mot = ajouté à la recherche.
- *  - Spécialités : liste officielle FMPM (42 spécialités, 3 options), lue sur la page de garde de
- *    chaque thèse (président du jury) — fichier theses-fmpm-page-de-garde.csv du dépôt public
+ *  - Spécialités : liste officielle FMPM (42 spécialités, 3 options), classement final du dépôt
+ *    (vote pondéré rapporteur / catégorie / président / titre, lu sur la page de garde de chaque
+ *    thèse) — fichier theses-fmpm-specialites.csv du dépôt public
  *    achma-learning/theses-maroc, chargé une fois (cache 24 h). Sans ce fichier, les autres
  *    diagrammes marchent quand même.
  *  - Type d'étude, hôpitaux, langue : lus dans le TITRE (indicatif, pas une donnée officielle).
@@ -36,11 +37,11 @@
   const FIRST_YEAR = 2006;
   const PAUSE_MS = 400;
   const CACHE_KEY = 'fmpm-theses-cache-v1';
-  const SPE_KEY = 'fmpm-theses-spe-cache-v1';
+  const SPE_KEY = 'fmpm-theses-spe-cache-v2'; // v1 = ancien fichier président du jury (551 classées)
   const CACHE_TTL = 24 * 3600 * 1000;
   const MAX_SHOWN = 200;
   const HEADER = ['Année', 'N°', 'Auteur', 'Titre', 'PDF (texte intégral)', 'Article (résumé, 2006-2014)'];
-  const SPE_URL = 'https://raw.githubusercontent.com/achma-learning/theses-maroc/main/archive/fmpm/theses-fmpm-page-de-garde.csv';
+  const SPE_URL = 'https://raw.githubusercontent.com/achma-learning/theses-maroc/main/archive/fmpm/theses-fmpm-specialites.csv';
   const OPTIONS = ['Spécialités de médecine', 'Spécialités de chirurgie', 'Spécialités de Biologie'];
   const SHORT = { 'Spécialités de médecine': 'Médecine', 'Spécialités de chirurgie': 'Chirurgie', 'Spécialités de Biologie': 'Biologie' };
 
@@ -129,7 +130,7 @@
     return rows.filter(r => r.length > 1).map(r => Object.fromEntries(head.map((h, i) => [h, r[i] || ''])));
   }
 
-  // "année|n°" → { spe, opt } from the cover-page file (président du jury), else These2.0 mapping.
+  // "année|n°" → { spe, opt, src } from the final classification (weighted vote, classer_fmpm.py).
   async function loadSpecialties() {
     const cached = readCache(SPE_KEY);
     if (cached) return cached.map;
@@ -137,8 +138,8 @@
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const map = {};
     for (const r of parseCSV(await res.text())) {
-      const spe = r['Spécialité FMPM'] || r['Spécialité These2.0 (correspondance)'];
-      if (spe) map[`${r['Année']}|${r['N°']}`] = { spe, opt: r['Option FMPM'] || '', src: r['Spécialité FMPM'] ? 'page de garde' : 'These2.0' };
+      const spe = r['Spécialité FMPM'];
+      if (spe) map[`${r['Année']}|${r['N°']}`] = { spe, opt: r['Option FMPM'] || '', src: r['Statut'] || 'classée' };
     }
     writeCache(SPE_KEY, { at: Date.now(), map });
     return map;
@@ -298,7 +299,7 @@
         <p class="chart-title" id="h-title">Thèses par année — cliquez une barre pour filtrer l'année</p>
         <div class="bars" id="h-bars" role="list"></div><div class="axis" id="h-axis"></div></div>
       <div class="card wide"><h3>Spécialités FMPM par année (médecine · chirurgie · biologie)</h3>
-        <p class="note">Spécialité du président du jury lue sur la page de garde (à défaut catégorie These2.0) — liste officielle des 42 spécialités FMPM. Clic sur une part = filtrer.</p>
+        <p class="note">Classement final du dépôt (vote pondéré rapporteur / catégorie / président / titre, d'après la page de garde) — liste officielle des 42 spécialités FMPM. Clic sur une part = filtrer.</p>
         <div id="c-opt"></div><div class="pies" id="c-pies"></div></div>
       <div class="card"><h3>Type d’étude</h3><p class="note">D’après le titre — indicatif. Une thèse peut compter dans plusieurs types.</p><div id="c-design"></div></div>
       <div class="card"><h3>Hôpitaux et villes cités</h3><p class="note">D’après le titre — indicatif.</p><div id="c-places"></div></div>
