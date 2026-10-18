@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         FMPM thèses — recherche en ligne + export CSV
 // @namespace    https://github.com/achma-learning/these
-// @version      1.1.0
+// @version      1.1.1
 // @description  Ajoute une barre de recherche au catalogue officiel des thèses FMPM (toutes les années, lues en direct sur le site) et exporte le CSV brut pour mettre à jour la copie locale du dépôt.
 // @match        https://wd.fmpm.uca.ma/biblio/theses/*
 // @match        http://wd.fmpm.uca.ma/biblio/theses/*
@@ -187,7 +187,8 @@
       s += `<a class="yr${y === PAGE_YEAR ? ' on' : ''}" href="${new URL(`${y}.htm`, BASE).href}">${y}</a>`;
     $('nav').innerHTML = s;
   }
-  // What the official list of this year says, and its oddities (numbers reused, one thesis under two numbers).
+  // What the official list of this year says, and its oddities: a N° given to two theses, and a line whose author +
+  // title repeat another N° (a copy error of the list: the N° is a real thesis, its PDF may be another one).
   function yearReport(rows) {
     const nums = rows.map(r => +r.num), max = Math.max(0, ...nums), have = new Set(nums);
     const byNum = new Map(), byThesis = new Map();
@@ -210,7 +211,7 @@
     $('yearinfo').innerHTML = `<b>${PAGE_YEAR}</b> : ${y.n} thèses en ligne, n° 1 à ${y.max}` +
       (y.missing > 0 ? ` — <span title="Numéros absents de la liste : thèses soutenues pas encore mises en ligne, ou numéros sautés">${y.missing} n° pas (encore) en ligne</span>` : '') +
       (y.shared.length ? ` · n° donné à deux thèses : ${y.shared.join(', ')}` : '') +
-      (y.twice.length ? ` · même thèse sous deux n° : ${y.twice.map(rs => `${esc(rs[0].author)} (${rs.map(r => r.num).join(', ')})`).join(' ; ')}` : '');
+      (y.twice.length ? ` · <span title="La liste officielle répète l'auteur et le titre d'un autre n° : erreur de copie probable. Chaque n° est une thèse ; ouvrir le PDF pour savoir laquelle.">même auteur et titre sous deux n°</span> : ${y.twice.map(rs => `${esc(rs[0].author)} (${rs.map(r => r.num).join(', ')})`).join(' ; ')}` : '');
   }
   // Labels in the official table: specialty (diagrams script) and warnings about the numbering.
   function annotatePage() {
@@ -230,7 +231,7 @@
       if (s) html += tag(`${s.spe}${s.st === 'confirmée' || s.st === 'vérifiée' ? '' : ' ?'}`, `Spécialité FMPM (classement achma-learning/theses-maroc) : ${s.st}${s.conf != null ? `, confiance ${Math.round(100 * s.conf)} %` : ''}`, '#dbe8fb');
       if (y.shared.includes(+num)) html += tag('⚠ n° partagé', `Le n° ${num} est donné à deux thèses différentes dans la liste officielle (même lien PDF)`, '#fde7c8');
       const other = twiceOf.get(`${num}|${who}`);
-      if (other) html += tag(`⚠ aussi n° ${other.join(', ')}`, 'La même thèse (auteur + titre) figure sous un autre numéro dans la liste officielle', '#fde7c8');
+      if (other) html += tag(`⚠ ligne répétée : n° ${other.join(', ')}`, 'Même auteur et même titre qu\'un autre n° dans la liste officielle : erreur de copie probable. Ce n° est une thèse à part entière ; son PDF peut être une autre thèse (2018-138, 2021-213 vérifiés).', '#fde7c8');
       if (html) cells[2].insertAdjacentHTML('beforeend', `<div class="fmpm-badges">${html}</div>`);
     }
   }

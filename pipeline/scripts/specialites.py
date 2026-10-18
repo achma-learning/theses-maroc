@@ -230,21 +230,23 @@ def _person(name: str) -> str:
     return " ".join(sorted(re.findall(r"[a-z]+", norm(name or ""))))
 
 
-def load_facts(path: Path = CLASSEMENT) -> dict[tuple[int, int], dict[str, tuple[str, str]]]:
+def load_facts(path: Path = CLASSEMENT) -> dict[tuple[int, int], dict[str, tuple[str, str] | None]]:
     """{(year, n°): {author: (specialty as spelled in GROUPS, source)}} from the final classification file
     (two authors under one number when the official list reuses it)."""
     if not path.exists():
         return {}
-    out: dict[tuple[int, int], dict[str, tuple[str, str]]] = {}
+    out: dict[tuple[int, int], dict[str, tuple[str, str] | None]] = {}
     with open(path, encoding="utf-8-sig", newline="") as f:
         for r in csv.DictReader(f):
             src = FACT_STATUS.get(r["Statut"])
             spe = OFFICIAL_SPELLING.get(r["Spécialité FMPM"], r["Spécialité FMPM"])
             spe = _BY_NORM.get(norm(spe).replace("-", " "), spe)
-            if src and spe:
+            fact = None                                    # every author is kept, even unclassified: a reused N°
+            if src and spe:                                # must stay "two theses", or one would get the other's line
                 if spe not in GROUP_OF:
                     raise ValueError(f"{path.name}: unknown specialty {r['Spécialité FMPM']!r}")
-                out.setdefault((int(r["Année"]), int(r["N°"])), {})[_person(r["Auteur"])] = (spe, src)
+                fact = (spe, src)
+            out.setdefault((int(r["Année"]), int(r["N°"])), {})[_person(r["Auteur"])] = fact
     return out
 
 

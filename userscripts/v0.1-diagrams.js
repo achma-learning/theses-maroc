@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         FMPM thèses — recherche en ligne + diagrammes
 // @namespace    https://github.com/achma-learning/these
-// @version      1.1.0
+// @version      1.1.1
 // @description  Barre de recherche en haut du catalogue officiel des thèses FMPM (toutes les années, lues en direct) et, en pied de page, des diagrammes dynamiques qui suivent la recherche : thèses par année, spécialités FMPM (médecine / chirurgie / biologie, comptage principal ou fractionnaire, statut, carte spécialité × année), type d'étude, hôpitaux cités, langue, mots fréquents.
 // @match        https://wd.fmpm.uca.ma/biblio/theses/*
 // @match        http://wd.fmpm.uca.ma/biblio/theses/*
@@ -41,7 +41,7 @@
   const FIRST_YEAR = 2006;
   const PAUSE_MS = 400;
   const CACHE_KEY = 'fmpm-theses-cache-v2'; // v1 counted lines printed twice on the site
-  const SPE_KEY = 'fmpm-theses-spe-cache-v4'; // v1 = ancien fichier président (551 classées) ; v2 = sans statut ni parts ; v3 = N° réutilisés confondus
+  const SPE_KEY = 'fmpm-theses-spe-cache-v5'; // v1 = ancien fichier président (551 classées) ; v2 = sans statut ni parts ; v3 = N° réutilisés confondus
   const CACHE_TTL = 24 * 3600 * 1000;
   const MAX_SHOWN = 200;
   const HEADER = ['Année', 'N°', 'Auteur', 'Titre', 'PDF (texte intégral)', 'Article (résumé, 2006-2014)'];
@@ -152,8 +152,8 @@
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const map = {};
     for (const r of parseCSV(await res.text())) {
-      const spe = r['Spécialité FMPM'];
-      if (!spe) continue;
+      const spe = r['Spécialité FMPM'];                                     // kept even when empty: a reused N° must
+                                                                              // stay two theses, or one takes the other's
       const parts = (r['Répartition'] || '').split('; ').map(p => p.split('=')).filter(p => p.length === 2).map(([k, v]) => [k, +v]);
       const e = { spe, opt: r['Option FMPM'] || '', st: r['Statut'] || 'classée', who: person(r['Auteur']),
         conf: r['Confiance'] ? +r['Confiance'] : null, sec: r['Spécialité secondaire'] || '', parts: parts.length ? parts : [[spe, 1]] };
@@ -286,7 +286,8 @@
       s += `<a class="yr${y === PAGE_YEAR ? ' on' : ''}" href="${new URL(`${y}.htm`, BASE).href}">${y}</a>`;
     $('nav').innerHTML = s;
   }
-  // What the official list of this year says, and its oddities (numbers reused, one thesis under two numbers).
+  // What the official list of this year says, and its oddities: a N° given to two theses, and a line whose author +
+  // title repeat another N° (a copy error of the list: the N° is a real thesis, its PDF may be another one).
   function yearReport(rows) {
     const nums = rows.map(r => +r.num), max = Math.max(0, ...nums), have = new Set(nums);
     const byNum = new Map(), byThesis = new Map();
@@ -309,7 +310,7 @@
     $('yearinfo').innerHTML = `<b>${PAGE_YEAR}</b> : ${y.n} thèses en ligne, n° 1 à ${y.max}` +
       (y.missing > 0 ? ` — <span title="Numéros absents de la liste : thèses soutenues pas encore mises en ligne, ou numéros sautés">${y.missing} n° pas (encore) en ligne</span>` : '') +
       (y.shared.length ? ` · n° donné à deux thèses : ${y.shared.join(', ')}` : '') +
-      (y.twice.length ? ` · même thèse sous deux n° : ${y.twice.map(rs => `${esc(rs[0].author)} (${rs.map(r => r.num).join(', ')})`).join(' ; ')}` : '');
+      (y.twice.length ? ` · <span title="La liste officielle répète l'auteur et le titre d'un autre n° : erreur de copie probable. Chaque n° est une thèse ; ouvrir le PDF pour savoir laquelle.">même auteur et titre sous deux n°</span> : ${y.twice.map(rs => `${esc(rs[0].author)} (${rs.map(r => r.num).join(', ')})`).join(' ; ')}` : '');
   }
   // Labels in the official table: specialty (diagrams script) and warnings about the numbering.
   function annotatePage() {
@@ -329,7 +330,7 @@
       if (s) html += tag(`${s.spe}${s.st === 'confirmée' || s.st === 'vérifiée' ? '' : ' ?'}`, `Spécialité FMPM (classement achma-learning/theses-maroc) : ${s.st}${s.conf != null ? `, confiance ${Math.round(100 * s.conf)} %` : ''}`, '#dbe8fb');
       if (y.shared.includes(+num)) html += tag('⚠ n° partagé', `Le n° ${num} est donné à deux thèses différentes dans la liste officielle (même lien PDF)`, '#fde7c8');
       const other = twiceOf.get(`${num}|${who}`);
-      if (other) html += tag(`⚠ aussi n° ${other.join(', ')}`, 'La même thèse (auteur + titre) figure sous un autre numéro dans la liste officielle', '#fde7c8');
+      if (other) html += tag(`⚠ ligne répétée : n° ${other.join(', ')}`, 'Même auteur et même titre qu\'un autre n° dans la liste officielle : erreur de copie probable. Ce n° est une thèse à part entière ; son PDF peut être une autre thèse (2018-138, 2021-213 vérifiés).', '#fde7c8');
       if (html) cells[2].insertAdjacentHTML('beforeend', `<div class="fmpm-badges">${html}</div>`);
     }
   }
@@ -446,7 +447,10 @@
   }
 
   // A N° reused for two theses holds one entry per author: never give one thesis the other's specialty.
-  const speOf = r => { const e = SPE && SPE[`${r.year}|${r.num}`]; return e && e.byAuthor ? e.byAuthor[person(r.author)] : e; };
+  const speOf = r => {
+    const e = SPE && SPE[`${r.year}|${r.num}`], x = e && e.byAuthor ? e.byAuthor[person(r.author)] : e;
+    return x && x.spe ? x : null;
+  };
   pageSpe = speOf;
 
   function highlight(text, terms) {
