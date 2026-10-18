@@ -216,6 +216,7 @@
       text-decoration: underline dotted var(--text-muted); text-underline-offset: 3px;
     }
     button.pivot:hover { color: var(--accent); text-decoration-color: var(--accent); }
+    button.pivot.tag { padding: 1px 6px; border-radius: 4px; background: var(--warn-bg); color: var(--warn-text); font-size: .75rem; }   /* guessed specialty status */
     .res-kw { display: flex; flex-wrap: wrap; gap: 4px 6px; font-family: var(--text-font); font-size: .78rem; }
     .kw { border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px; background: var(--panel); color: var(--text-secondary); text-decoration: none; }
     .kw:hover { border-color: var(--accent); color: var(--accent); }
@@ -302,7 +303,7 @@
     <p class="hint" id="hint" hidden>
       Sans accents ni majuscules : <code>diabete</code> trouve « DIABÈTE ». Tous les mots doivent être présents.
       <code>"pied bot"</code> expression exacte · <code>-enfant</code> exclure · <code>lupus|les</code> l'un ou l'autre ·
-      <code>titre:</code> <code>auteur:</code> <code>rapporteur:</code> <code>jury:</code> <code>motcle:</code> <code>spe:</code> (spécialité de la liste officielle FMPM) <code>option:chirurgie</code> (<code>medecine</code>, <code>biologie</code>) <code>cat:</code> (libellé de la source) <code>code:</code> <code>resume:</code> cibler un champ · <code>langue:en</code> ·
+      <code>titre:</code> <code>auteur:</code> <code>rapporteur:</code> <code>jury:</code> <code>motcle:</code> <code>spe:</code> (spécialité de la liste officielle FMPM) <code>option:chirurgie</code> (<code>medecine</code>, <code>biologie</code>) <code>statut:confirmee</code> (spécialité FMPM : <code>probable</code>, <code>"a verifier"</code>, <code>verifiee</code>) <code>cat:</code> (libellé de la source) <code>code:</code> <code>resume:</code> cibler un champ · <code>langue:en</code> ·
       <code>annee:2020</code> <code>annee:2015-2020</code> <code>annee:&gt;2018</code> · <code>fac:fes</code> (<code>fmpm</code>, <code>fmpr</code>, <code>med</code>, <code>pharma</code>, <code>fes</code>).
       Bangs (comme searchAIO, ouvrent la source externe avec Entrée) : <code>!toubkal</code> <code>!t2</code> <code>!opac</code> <code>!gfmpm</code> <code>!gfes</code> <code>!these</code> <code>!cismef</code>.
       Les noms, mots-clés et spécialités soulignés en pointillé se cliquent : ils lancent la recherche correspondante.
@@ -371,7 +372,7 @@
     <a href="these2/">These2.0 FMPM</a> : recherche + tableau de bord des thèses de Marrakech, contrôlé chaque semaine sur le site officiel.
     Données : <code>archive/**/theses-*.csv</code> de ce site (sources et limites : <a href="archive/sources-theses-maroc.md">archive/sources-theses-maroc.md</a>).
     Les listes de Rabat sont en MAJUSCULES et souvent sans accents ; FMPM : copie du 17/10/2026 (4 013 thèses), les ajouts plus récents sont sur le site officiel ; Fès : liste complète 2007-2026, sans les résumés.
-    Spécialité FMPM : celle du président du jury, lue sur la page de garde du PDF officiel.
+    Spécialité FMPM : vote pondéré — spécialité du rapporteur et du président lues sur la page de garde du PDF officiel, catégorie de la bibliothèque, titre ; statut <code>confirmée</code>, <code>probable</code> ou <code>à vérifier</code> (les spécialités devinées sont marquées « ? »).
     Jury et mots-clés des thèses FMPM 2006-2024 : lien « These2.0 » dans la fiche (site non officiel d'un étudiant).
     Vérifiez toujours un sujet sur <a href="https://toubkal.imist.ma/search" target="_blank" rel="noopener noreferrer">Toubkal</a> avant de le déposer.
   </footer>
@@ -440,6 +441,10 @@ const FES_SPEC = { file: 'archive/fmpdf/theses-fmpf-2007-2026-specialites.csv', 
 // official PDF, archive/specialites/page_de_garde.py). Specialty = the jury president's, from the official
 // list; it wins over the These2.0 label. Names fill president/rapporteur only where These2.0 has none.
 const FMPM_COVER = { file: 'archive/fmpm/theses-fmpm-page-de-garde.csv', match: /^theses-fmpm-page-de-garde\.csv$/ };
+// Light (≈2 MB), always loaded: FINAL FMPM specialty per thesis (archive/specialites/classer_fmpm.py), crossing
+// cover page, library/These2.0 category and title. Gives spe/opt + a Statut (confirmée | probable | à vérifier |
+// vérifiée); wins over the cover layer and the These2.0 mapping. Absent file = previous behaviour.
+const FMPM_CLASS = { file: 'archive/fmpm/theses-fmpm-specialites.csv', match: /^theses-fmpm-specialites\.csv$/ };
 // Official FMPM specialty list (archive/specialites/liste-specialites-fmpm-2024.pdf) and the table that
 // maps each source's own label (These2.0 category, Fès spécialité, FMPR pharmacie thème) onto it.
 const SPE_TABLE = { file: 'archive/specialites/correspondance-specialites.csv', match: /^correspondance-specialites\.csv$/ };
@@ -617,7 +622,14 @@ function setDerived(rec) {
   const m = rec.cat ? SPE_MAP.get(`${SPE_SRC[rec.src]}|${norm(rec.cat)}`) : null;
   rec.spe = m ? m.spe : ''; rec.opt = m ? m.opt : ''; rec.speNote = m ? m.rem : '';
   if (c && c.spe) { rec.spe = c.spe; rec.opt = c.opt; rec.speNote = `page de garde : ${c.rule}${c.presT ? ` — président : ${c.presT}` : ''}`; }
-  rec.nP = norm(rec.spe); rec.nO = norm(rec.opt);
+  rec.speStatus = ''; rec.speWhy = '';
+  const k = rec.cls;                                      // final classification (theses-fmpm-specialites.csv)
+  if (k) {                                                // no specialty there → keep the fallback, marked « ? »
+    if (k.spe) { rec.spe = k.spe; rec.opt = k.opt; }
+    rec.speStatus = k.status; rec.speWhy = k.why + (!k.spe && rec.speNote ? ` ; à défaut : ${rec.speNote}` : '');
+    rec.speNote = [k.status, k.why].filter(Boolean).join(' — ');
+  }
+  rec.nP = norm(rec.spe); rec.nO = norm(rec.opt); rec.nSt = norm(rec.speStatus);
   rec.nJ = norm([rec.pres, rec.jury].join(' ; '));
   rec.nK = norm(rec.kw);
   rec.nS = norm(rec.cat);
@@ -669,6 +681,32 @@ function mergeCover(rows) {
   return n;
 }
 
+// Final FMPM classification: one row per thesis (year + N°, same official list). Reads only the columns it
+// needs, so a copy without « These2.0 » (public mirror) works the same.
+function mergeClass(rows) {
+  const byKey = new Map();                                // year + N° → records (a few N° are used twice)
+  for (const r of DB) if (r.src === 'fmpm') { const k = `${r.year}-${+r.num}`; byKey.set(k, [...(byKey.get(k) || []), r]); }
+  let n = 0;
+  for (const r of rows) {
+    const recs = byKey.get(`${+r['Année']}-${+r['N°']}`) || [];
+    const rec = recs.length < 2 ? recs[0]
+      : recs.find(x => x.nT === norm(r['Titre'] || '')) || recs.find(x => x.nA === norm(r['Auteur'] || ''));
+    const status = (r['Statut'] || '').trim();
+    if (!rec || !status) continue;
+    const src = r['Source retenue'] || '', rule = r['Règle page de garde'] || '';
+    let how = src;
+    if (/^page de garde/.test(src) && /^(président|rapporteur)/.test(rule)) {
+      const who = rule.match(/^\S+/)[0], tit = who === 'président' ? r['Titre du président'] : r['Titre du rapporteur'];
+      const why = (rule.match(/\(.*\)/) || [''])[0];
+      how = `page de garde : ${who}${tit ? ' ' + tit : ''}${why ? ' ' + why : ''}`;
+    }
+    rec.cls = { spe: r['Spécialité FMPM'] || '', opt: r['Option FMPM'] || '', status,
+                why: [how, r['Raison (à vérifier)']].filter(Boolean).join(' ; ') };
+    n++;
+  }
+  return n;
+}
+
 function mergeFesFull(rows) {
   const byPdf = new Map(DB.filter(r => r.src === 'fmpdf').map(r => [r.pdf, r]));
   let n = 0;
@@ -713,20 +751,21 @@ async function fetchText(path) {
 async function loadAll() {
   const t0 = performance.now();
   const opt = f => f ? fetchText(f).then(parseCSV).catch(() => null) : null;   // in parallel; absent = fine
-  const t2 = opt(T2_FMPM.file), fesSpec = opt(FES_SPEC.file), speTable = opt(SPE_TABLE.file), cover = opt(FMPM_COVER.file);
+  const t2 = opt(T2_FMPM.file), fesSpec = opt(FES_SPEC.file), speTable = opt(SPE_TABLE.file), cover = opt(FMPM_COVER.file), cls = opt(FMPM_CLASS.file);
   await Promise.all(SOURCES.map(async s => {
     try { addRecords(s, parseCSV(await fetchText(s.file))); }
     catch (e) { loaded[s.id] = e; }
   }));
-  applyLayers(await fesSpec, await speTable, await t2, await cover);
+  applyLayers(await fesSpec, await speTable, await t2, await cover, await cls);
   afterLoad(performance.now() - t0);
 }
 
-let fesSpecCount = 0, coverCount = 0;
-function applyLayers(fesSpecRows, speRows, t2RowsIn, coverRows) {
+let fesSpecCount = 0, coverCount = 0, classCount = 0;
+function applyLayers(fesSpecRows, speRows, t2RowsIn, coverRows, classRows) {
   if (speRows) loadSpeTable(speRows);
   if (fesSpecRows && typeof loaded.fmpdf === 'number') fesSpecCount = mergeFesSpec(fesSpecRows);
   if (coverRows && typeof loaded.fmpm === 'number') coverCount = mergeCover(coverRows);
+  if (classRows && typeof loaded.fmpm === 'number') classCount = mergeClass(classRows);
   applyT2Rows(t2RowsIn);
   DB.forEach(setDerived);
 }
@@ -798,7 +837,7 @@ async function loadFromFiles(fileList) {
   pickedFesFull = files.find(f => FES_FULL.match.test(f.name)) || null;
   if (!SOURCES.some(s => typeof loaded[s.id] === 'number')) { toast('Aucun fichier theses-*.csv reconnu.'); return; }
   const pick = async m => { const f = files.find(f => m.match.test(f.name)); return f ? parseCSV(await f.text()) : null; };
-  applyLayers(await pick(FES_SPEC), await pick(SPE_TABLE), await pick(T2_FMPM), await pick(FMPM_COVER));
+  applyLayers(await pick(FES_SPEC), await pick(SPE_TABLE), await pick(T2_FMPM), await pick(FMPM_COVER), await pick(FMPM_CLASS));
   afterLoad(performance.now() - t0);
 }
 
@@ -830,6 +869,7 @@ const FIELD_ALIASES = {
   cat: 'cat', categorie: 'cat', theme: 'cat',
   spe: 'spe', specialite: 'spe', specialty: 'spe',
   option: 'opt', opt: 'opt',
+  statut: 'statut', status: 'statut', st: 'statut',
   langue: 'lang', lang: 'lang', l: 'lang',
   code: 'code', n: 'code',
   resume: 'abs', abstract: 'abs', abs: 'abs',
@@ -902,6 +942,7 @@ function fieldsFor(term, withAbs) {
     case 'cat': return ['nS'];
     case 'spe': return ['nP'];
     case 'opt': return ['nO'];
+    case 'statut': return ['nSt'];
     case 'lang': return ['nL'];
     case 'code': return ['nC'];
     case 'abs': return ['nAbs'];
@@ -1098,9 +1139,12 @@ const SEP = '<span class="sep"> · </span>';
 function people(s, terms) { return splitNames(s).map(n => pivot(n, personQuery(n), terms)).join(SEP); }
 function catPivot(r, cls) { return r.cat ? pivot(r.cat, `cat:"${qv(r.cat)}"`, null, cls) : ''; }
 // Official FMPM specialty when the source label maps onto one, else the source's own label.
+// A guessed FMPM specialty (statut probable / à vérifier) is marked « ? ».
+const speGuess = r => /^(probable|à vérifier)$/.test(r.speStatus);
 function spePivot(r, cls) {
   if (!r.spe) return catPivot(r, cls);
-  return `<button type="button" class="${cls || 'pivot'}" data-q="${esc(`spe:"${qv(r.spe)}"`)}" title="Spécialité (liste officielle FMPM, ${esc(optShort(r.opt))}) — d'après « ${esc(r.cat)} »">${esc(r.spe)}</button>`;
+  const from = r.speStatus ? r.speNote : `d'après « ${r.cat} »`;
+  return `<button type="button" class="${cls || 'pivot'}" data-q="${esc(`spe:"${qv(r.spe)}"`)}" title="Spécialité (liste officielle FMPM, ${esc(optShort(r.opt))}) — ${esc(from)}">${esc(r.spe)}${speGuess(r) ? ' ?' : ''}</button>`;
 }
 function kwPivots(r, terms, max = Infinity) { return r.kws.slice(0, max).map(k => pivot(k, `motcle:"${qv(k)}"`, terms, 'kw')).join(''); }
 const fromT2 = r => !!(r.t2 && t2State === 'on');
@@ -1170,7 +1214,7 @@ function openFiche(r) {
       ${row('N°', esc(r.num))}
       ${row('Code', r.code && highlight(r.code, terms))}
       ${row('Faculté', esc(`${s.fullName} — ${s.filiere}`))}
-      ${row('Spécialité FMPM', (r.spe || r.opt) && `${r.spe ? spePivot(r) : '<em>non attribuée</em>'} <span class="sep">·</span> ${pivot(optShort(r.opt), `option:${qv(optShort(r.opt))}`)}${r.speNote ? ` <span class="unoff">${esc(r.speNote)}</span>` : ''}`)}
+      ${row('Spécialité FMPM', (r.spe || r.opt || r.speStatus) && `${r.spe ? spePivot(r) : '<em>non attribuée</em>'}${r.opt ? ` <span class="sep">·</span> ${pivot(optShort(r.opt), `option:${qv(optShort(r.opt))}`)}` : ''}${r.speStatus ? ` <span class="sep">·</span> ${pivot(r.speStatus, `statut:"${qv(r.speStatus)}"`, null, speGuess(r) ? 'pivot tag' : 'pivot')}${r.speWhy ? ` <span class="unoff">${esc(r.speWhy)}</span>` : ''}` : r.speNote ? ` <span class="unoff">${esc(r.speNote)}</span>` : ''}`)}
       ${row('Catégorie source' + (r.t2 && r.t2.cat && fromT2(r) ? un : ''), r.cat && (catPivot(r) + (fromT2(r) && r.t2.catPath ? ` <span class="unoff">${esc(r.t2.catPath)}</span>` : '') + (!r.spe && !r.opt && r.speNote ? ` <span class="unoff">${esc(r.speNote)}</span>` : '')))}
       ${row('Langue' + un, esc(r.lang))}
       ${row('Président' + un, r.pres && people(r.pres, terms))}
@@ -1219,9 +1263,10 @@ function renderFacets() {
   $('facetBody').innerHTML =
     col('Spécialités (liste FMPM)', topCounts(hits, r => r.spe ? [[qv(r.spe), r.spe]] : []), it => `spe:"${it.key}"`, 'Aucune spécialité connue pour ces thèses.') +
     col('Options (liste FMPM)', topCounts(hits, r => r.opt ? [[qv(optShort(r.opt)), optShort(r.opt)]] : []), it => `option:${it.key}`, '—') +
+    (classCount ? col('Statut (spécialité)', topCounts(hits, r => r.speStatus ? [[qv(r.speStatus), r.speStatus]] : []), it => `statut:"${it.key}"`, 'FMPM seulement.') : '') +
     col('Rapporteurs / jury', topCounts(hits, r => r.people), it => personQuery(it.label), 'Aucun rapporteur dans ces listes.') +
     (t2State === 'on' ? col('Mots-clés', topCounts(hits, r => r.kws.map(k => [qv(k), k])), it => `motcle:"${it.key}"`, 'Mots-clés : FMPM 2006-2024 seulement (These2.0).') : '') +
-    `<p class="ext-note">Comptés sur les ${hits.length.toLocaleString('fr-FR')} résultats. Spécialités et options : <a href="archive/specialites/liste-specialites-fmpm-2024.pdf" target="_blank" rel="noopener noreferrer">liste officielle de la FMPM</a>, déduites du libellé de chaque source — ${t2State === 'on' ? 'FMPM (catégorie These2.0), ' : ''}Fès (spécialité CDIM), FMPR pharmacie (thème, rare) ; table : <code>archive/specialites/correspondance-specialites.csv</code>.
+    `<p class="ext-note">Comptés sur les ${hits.length.toLocaleString('fr-FR')} résultats. Spécialités et options : <a href="archive/specialites/liste-specialites-fmpm-2024.pdf" target="_blank" rel="noopener noreferrer">liste officielle de la FMPM</a>, déduites du libellé de chaque source — ${classCount ? 'FMPM (classement final : page de garde, bibliothèque, titre — statut confirmée / probable / à vérifier ; <code>archive/fmpm/theses-fmpm-specialites.csv</code>), ' : t2State === 'on' ? 'FMPM (catégorie These2.0), ' : ''}Fès (spécialité CDIM), FMPR pharmacie (thème, rare) ; table : <code>archive/specialites/correspondance-specialites.csv</code>.
       Rapporteurs : FMPR, Fès${t2State === 'on' ? ', FMPM (These2.0, + président et jury)' : ''}. Les noms sont regroupés sans titres ni initiales — un même professeur peut encore apparaître sous deux formes.</p>`;
 }
 function addToQuery(term) {
@@ -1285,9 +1330,9 @@ function readHash() {
 }
 
 function exportCsv() {
-  const cols = ['Faculté', 'Filière', 'Année', 'N°', 'Code', 'Auteur', 'Titre', 'Rapporteur', 'Président', 'Jury', 'Spécialité FMPM', 'Option FMPM', 'Catégorie source', 'Mots-clés', 'Langue', 'Remarque', 'Texte intégral', 'Liste source', 'Source des champs jury/mots-clés'];
+  const cols = ['Faculté', 'Filière', 'Année', 'N°', 'Code', 'Auteur', 'Titre', 'Rapporteur', 'Président', 'Jury', 'Spécialité FMPM', 'Option FMPM', 'Statut spécialité', 'Catégorie source', 'Mots-clés', 'Langue', 'Remarque', 'Texte intégral', 'Liste source', 'Source des champs jury/mots-clés'];
   const q = v => /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
-  const lines = [cols.join(',')].concat(last.hits.map(r => [SRC[r.src].long, SRC[r.src].filiere, r.year || '', r.num, r.code, r.author, r.title, r.rapp, r.pres, r.jury, r.spe, optShort(r.opt), r.cat, r.kw, r.lang, r.note, r.pdf, r.srcList, fromT2(r) ? 'These2.0 (non officiel)' : ''].map(v => q(String(v ?? ''))).join(',')));
+  const lines = [cols.join(',')].concat(last.hits.map(r => [SRC[r.src].long, SRC[r.src].filiere, r.year || '', r.num, r.code, r.author, r.title, r.rapp, r.pres, r.jury, r.spe, optShort(r.opt), r.speStatus, r.cat, r.kw, r.lang, r.note, r.pdf, r.srcList, fromT2(r) ? 'These2.0 (non officiel)' : ''].map(v => q(String(v ?? ''))).join(',')));
   const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
