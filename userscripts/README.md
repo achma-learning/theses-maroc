@@ -4,8 +4,10 @@ Deux scripts qui s'exécutent **sur le site officiel** de la FMPM (https://wd.fm
 
 | Fichier | Version | Ce qu'il ajoute |
 |---|---|---|
-| [`v0-stable.js`](v0-stable.js) | 1.0.1 | Barre de recherche en haut (toutes les années, sans accents) + bouton **Exporter CSV brut** (pour `archive/fmpm/methode/build_fmpm.py`). Même code que la version publiée sur [Greasy Fork](https://greasyfork.org/scripts/600588) (= `archive/fmpm/methode/fmpm-recherche.user.js`). |
-| [`v0.1-diagrams.js`](v0.1-diagrams.js) | 0.2.0 | Tout v0 (barre **en haut**) + **diagrammes dynamiques en pied de page**, recalculés à chaque recherche. |
+| [`v0-stable.js`](v0-stable.js) | 1.0.2 | Barre de recherche en haut (toutes les années, sans accents) + bouton **Exporter CSV brut** (pour `archive/fmpm/methode/build_fmpm.py`). Même code que la version publiée sur [Greasy Fork](https://greasyfork.org/scripts/600588) (= `archive/fmpm/methode/fmpm-recherche.user.js`). |
+| [`v0.1-diagrams.js`](v0.1-diagrams.js) | 0.2.1 | Tout v0 (barre **en haut**) + **diagrammes dynamiques en pied de page**, recalculés à chaque recherche. |
+
+**1.0.2 / 0.2.1 (18/10/2026) :** une ligne imprimée deux fois sur le site officiel (2023-125, 2025-329) compte une seule thèse (4 013 au lieu de 4 015) ; un même n° donné à deux thèses différentes (2025-214, 2026-26/36/63) garde les deux, chacune avec **sa** spécialité (comparaison des auteurs sans accents ni ordre des mots) ; bouton **These2.0 ↗** (même recherche sur https://thesefmpm3.vercel.app, mis à jour chaque jour) et lien vers son tableau `/stats`. Greasy Fork est relié au dépôt GitHub : augmenter `@version` suffit pour publier la mise à jour.
 
 ## Lancer un script
 
