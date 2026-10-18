@@ -117,12 +117,12 @@
     for (const v of values) sel.insertAdjacentHTML("beforeend", `<option value="${esc(v)}">${esc(v)}</option>`);
   }
 
-  // data/status.json is rewritten by the weekly check even when nothing changed
+  // data/status.json: daily check, committed when the data changed and on Mondays
   async function statusText() {
     try {
       const st = await (await fetch("data/status.json", { cache: "no-cache" })).json();
       const d = (iso) => new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
-      const late = Date.now() - new Date(st.checkedAt) > 9 * 864e5; // weekly check missed
+      const late = Date.now() - new Date(st.checkedAt) > 9 * 864e5; // no Monday commit: the daily check is failing
       return ` · vérifié le ${d(st.checkedAt)}${late ? " ⚠ contrôle en retard" : ""}`;
     } catch { return ""; }
   }

@@ -106,7 +106,7 @@
       ]);
       if (st) {
         const day = (iso) => new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
-        statusLine = ` · vérifié le ${day(st.checkedAt)} (contrôle hebdomadaire du site officiel)${Date.now() - new Date(st.checkedAt) > 9 * 864e5 ? " ⚠ contrôle en retard" : ""}`;
+        statusLine = ` · vérifié le ${day(st.checkedAt)} (site officiel contrôlé chaque jour, relevé enregistré chaque lundi)${Date.now() - new Date(st.checkedAt) > 9 * 864e5 ? " ⚠ contrôle en retard" : ""}`;
       }
       renderCharts(s);
       ROWS = d.data.map((t) => {
