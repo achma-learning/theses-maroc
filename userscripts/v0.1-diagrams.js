@@ -1,10 +1,12 @@
 // ==UserScript==
 // @name         FMPM thèses — recherche en ligne + diagrammes
 // @namespace    https://github.com/achma-learning/these
-// @version      0.1.0
+// @version      0.1.1
 // @description  Barre de recherche en haut du catalogue officiel des thèses FMPM (toutes les années, lues en direct) et, en pied de page, des diagrammes dynamiques qui suivent la recherche : thèses par année, spécialités FMPM (médecine / chirurgie / biologie), type d'étude, hôpitaux cités, langue, mots fréquents.
 // @match        https://wd.fmpm.uca.ma/biblio/theses/*
 // @match        http://wd.fmpm.uca.ma/biblio/theses/*
+// @exclude      https://wd.fmpm.uca.ma/biblio/theses/annee-htm/FT/*
+// @exclude      http://wd.fmpm.uca.ma/biblio/theses/annee-htm/FT/*
 // @grant        none
 // @license      MIT
 // @run-at       document-idle
@@ -27,6 +29,7 @@
  */
 (function () {
   'use strict';
+  if (/\/annee-htm\/FT\//i.test(location.pathname)) return; // PDF texte intégral : laisser le lecteur PDF
   if (document.getElementById('fmpm-search-host')) return; // already injected
 
   const BASE = new URL('/biblio/theses/annee-htm/', location.href);

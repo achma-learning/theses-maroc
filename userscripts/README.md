@@ -4,8 +4,8 @@ Deux scripts qui s'exécutent **sur le site officiel** de la FMPM (https://wd.fm
 
 | Fichier | Version | Ce qu'il ajoute |
 |---|---|---|
-| [`v0-stable.js`](v0-stable.js) | 1.0.0 | Barre de recherche en haut (toutes les années, sans accents) + bouton **Exporter CSV brut** (pour `archive/fmpm/methode/build_fmpm.py`). Même code que la version publiée sur [Greasy Fork](https://greasyfork.org/scripts/600588) (= `archive/fmpm/methode/fmpm-recherche.user.js`). |
-| [`v0.1-diagrams.js`](v0.1-diagrams.js) | 0.1.0 | Tout v0 (barre **en haut**) + **diagrammes dynamiques en pied de page**, recalculés à chaque recherche. |
+| [`v0-stable.js`](v0-stable.js) | 1.0.1 | Barre de recherche en haut (toutes les années, sans accents) + bouton **Exporter CSV brut** (pour `archive/fmpm/methode/build_fmpm.py`). Même code que la version publiée sur [Greasy Fork](https://greasyfork.org/scripts/600588) (= `archive/fmpm/methode/fmpm-recherche.user.js`). |
+| [`v0.1-diagrams.js`](v0.1-diagrams.js) | 0.1.1 | Tout v0 (barre **en haut**) + **diagrammes dynamiques en pied de page**, recalculés à chaque recherche. |
 
 ## Lancer un script
 
