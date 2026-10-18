@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         FMPM thèses — recherche en ligne + export CSV
 // @namespace    https://github.com/achma-learning/these
-// @version      1.0.1
+// @version      1.0.2
 // @description  Ajoute une barre de recherche au catalogue officiel des thèses FMPM (toutes les années, lues en direct sur le site) et exporte le CSV brut pour mettre à jour la copie locale du dépôt.
 // @match        https://wd.fmpm.uca.ma/biblio/theses/*
 // @match        http://wd.fmpm.uca.ma/biblio/theses/*
@@ -32,7 +32,7 @@
   const BASE = new URL('/biblio/theses/annee-htm/', location.href);
   const FIRST_YEAR = 2006;
   const PAUSE_MS = 400;
-  const CACHE_KEY = 'fmpm-theses-cache-v1';
+  const CACHE_KEY = 'fmpm-theses-cache-v2'; // v1 counted lines printed twice on the site
   const CACHE_TTL = 24 * 3600 * 1000;
   const MAX_SHOWN = 200;
   const HEADER = ['Année', 'N°', 'Auteur', 'Titre', 'PDF (texte intégral)', 'Article (résumé, 2006-2014)'];
@@ -54,16 +54,25 @@
     return { year: y, status: 200, rows: parseYear(html, y, url) };
   }
 
+  // Same person whatever the accents, case or word order (« IMANE EL OUAFRI » = « EL OUAFRI IMANE »).
+  const person = s => norm(s).replace(/[^a-z\s]/g, ' ').split(/\s+/).filter(Boolean).sort().join(' ');
+  const T2_SITE = 'https://thesefmpm3.vercel.app';            // These2.0, same list, updated every day
+
   // One <tr> per thesis: N° | Auteur | Titre | TEXTE INTEGRAL (+ article link 2006-2014).
+  // The site prints some lines twice (2023-125, 2025-329): same N° + same author = one thesis. It also
+  // gives one N° to two different theses (2025-214, 2026-26/36/63): both are kept.
   function parseYear(html, y, pageUrl) {
     const doc = new DOMParser().parseFromString(html, 'text/html');
-    const out = [];
+    const out = [], seen = new Set();
     for (const tr of doc.querySelectorAll('tr')) {
       const cells = [...tr.children].filter(c => c.tagName === 'TD' || c.tagName === 'TH');
       if (cells.length < 3) continue;
       const num = clean(cells[0].textContent);
       if (!/^\d+$/.test(num)) continue;
       const links = [...tr.querySelectorAll('a[href]')].map(a => new URL(a.getAttribute('href'), pageUrl).href.replace(/^http:/, 'https:'));
+      const key = `${Number(num)}|${person(cells[1].textContent)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
       const titleCell = cells[2].cloneNode(true);
       titleCell.querySelectorAll('a').forEach(a => a.remove());
       out.push({
@@ -152,6 +161,7 @@
       <input id="q" type="search" placeholder="Mots du titre ou de l'auteur, ex. lupus marrakech (raccourci : /)" autocomplete="off">
       <button id="reload" title="Relire toutes les pages annuelles sur le site">↻ Relire en ligne</button>
       <button id="export" title="Télécharger le CSV brut pour mettre à jour la copie locale du dépôt">⬇ Exporter CSV brut</button>
+      <button id="t2" title="Même recherche sur These2.0 (thesefmpm3.vercel.app) : jury, spécialités, statistiques ; mis à jour chaque jour">These2.0 ↗</button>
       <button id="hide" title="Masquer">✕</button>
     </div>
     <div class="meta" id="meta">Chargement…</div>
@@ -213,6 +223,10 @@
   let timer;
   $('q').addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(search, 120); });
   $('reload').addEventListener('click', () => start(true));
+  $('t2').addEventListener('click', () => {
+    const q = $('q').value.trim();
+    open(`${T2_SITE}/search${q ? `?search=${encodeURIComponent(q)}` : ''}`, '_blank', 'noopener');
+  });
   $('hide').addEventListener('click', () => host.remove());
   $('export').addEventListener('click', () => {
     if (!DATA.rows.length) { $('meta').textContent = 'Rien à exporter : chargez d\'abord les données.'; return; }

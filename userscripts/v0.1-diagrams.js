@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         FMPM thèses — recherche en ligne + diagrammes
 // @namespace    https://github.com/achma-learning/these
-// @version      0.2.0
+// @version      0.2.1
 // @description  Barre de recherche en haut du catalogue officiel des thèses FMPM (toutes les années, lues en direct) et, en pied de page, des diagrammes dynamiques qui suivent la recherche : thèses par année, spécialités FMPM (médecine / chirurgie / biologie, comptage principal ou fractionnaire, statut, carte spécialité × année), type d'étude, hôpitaux cités, langue, mots fréquents.
 // @match        https://wd.fmpm.uca.ma/biblio/theses/*
 // @match        http://wd.fmpm.uca.ma/biblio/theses/*
@@ -40,8 +40,8 @@
   const BASE = new URL('/biblio/theses/annee-htm/', location.href);
   const FIRST_YEAR = 2006;
   const PAUSE_MS = 400;
-  const CACHE_KEY = 'fmpm-theses-cache-v1';
-  const SPE_KEY = 'fmpm-theses-spe-cache-v3'; // v1 = ancien fichier président (551 classées) ; v2 = sans statut ni parts
+  const CACHE_KEY = 'fmpm-theses-cache-v2'; // v1 counted lines printed twice on the site
+  const SPE_KEY = 'fmpm-theses-spe-cache-v4'; // v1 = ancien fichier président (551 classées) ; v2 = sans statut ni parts ; v3 = N° réutilisés confondus
   const CACHE_TTL = 24 * 3600 * 1000;
   const MAX_SHOWN = 200;
   const HEADER = ['Année', 'N°', 'Auteur', 'Titre', 'PDF (texte intégral)', 'Article (résumé, 2006-2014)'];
@@ -66,16 +66,25 @@
     return { year: y, status: 200, rows: parseYear(html, y, url) };
   }
 
+  // Same person whatever the accents, case or word order (« IMANE EL OUAFRI » = « EL OUAFRI IMANE »).
+  const person = s => norm(s).replace(/[^a-z\s]/g, ' ').split(/\s+/).filter(Boolean).sort().join(' ');
+  const T2_SITE = 'https://thesefmpm3.vercel.app';            // These2.0, same list, updated every day
+
   // One <tr> per thesis: N° | Auteur | Titre | TEXTE INTEGRAL (+ article link 2006-2014).
+  // The site prints some lines twice (2023-125, 2025-329): same N° + same author = one thesis. It also
+  // gives one N° to two different theses (2025-214, 2026-26/36/63): both are kept.
   function parseYear(html, y, pageUrl) {
     const doc = new DOMParser().parseFromString(html, 'text/html');
-    const out = [];
+    const out = [], seen = new Set();
     for (const tr of doc.querySelectorAll('tr')) {
       const cells = [...tr.children].filter(c => c.tagName === 'TD' || c.tagName === 'TH');
       if (cells.length < 3) continue;
       const num = clean(cells[0].textContent);
       if (!/^\d+$/.test(num)) continue;
       const links = [...tr.querySelectorAll('a[href]')].map(a => new URL(a.getAttribute('href'), pageUrl).href.replace(/^http:/, 'https:'));
+      const key = `${Number(num)}|${person(cells[1].textContent)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
       const titleCell = cells[2].cloneNode(true);
       titleCell.querySelectorAll('a').forEach(a => a.remove());
       out.push({
@@ -146,8 +155,12 @@
       const spe = r['Spécialité FMPM'];
       if (!spe) continue;
       const parts = (r['Répartition'] || '').split('; ').map(p => p.split('=')).filter(p => p.length === 2).map(([k, v]) => [k, +v]);
-      map[`${r['Année']}|${r['N°']}`] = { spe, opt: r['Option FMPM'] || '', st: r['Statut'] || 'classée',
+      const e = { spe, opt: r['Option FMPM'] || '', st: r['Statut'] || 'classée', who: person(r['Auteur']),
         conf: r['Confiance'] ? +r['Confiance'] : null, sec: r['Spécialité secondaire'] || '', parts: parts.length ? parts : [[spe, 1]] };
+      const k = `${r['Année']}|${r['N°']}`, old = map[k];
+      if (!old) map[k] = e;                                                  // usual case: one thesis per N°
+      else if (old.byAuthor) old.byAuthor[e.who] = e;
+      else if (old.who !== e.who) map[k] = { byAuthor: { [old.who]: old, [e.who]: e } };
     }
     writeCache(SPE_KEY, { at: Date.now(), map });
     return map;
@@ -245,6 +258,7 @@
       <input id="q" type="search" placeholder="Mots du titre ou de l'auteur, ex. lupus marrakech (raccourci : /)" autocomplete="off">
       <button id="reload" title="Relire toutes les pages annuelles sur le site">↻ Relire en ligne</button>
       <button id="export" title="Télécharger le CSV brut pour mettre à jour la copie locale du dépôt">⬇ Exporter CSV brut</button>
+      <button id="t2" title="Même recherche sur These2.0 (thesefmpm3.vercel.app) : jury, spécialités, statistiques ; mis à jour chaque jour">These2.0 ↗</button>
       <button id="todiag" title="Aller aux diagrammes en bas de page">📊 Diagrammes ↓</button>
       <button id="hide" title="Masquer">✕</button>
     </div>
@@ -307,7 +321,7 @@
     .axis { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 4px; font-variant-numeric: tabular-nums; }
   </style>
   <div class="box" id="fbox">
-    <h2>📊 Diagrammes des thèses FMPM</h2>
+    <h2>📊 Diagrammes des thèses FMPM <a href="https://thesefmpm3.vercel.app/stats" target="_blank" rel="noopener" style="font-size:12.5px;font-weight:400">même tableau sur These2.0 ↗</a></h2>
     <div class="sub" id="fsub">Chargement…</div>
     <div class="grid">
       <div class="card wide">
@@ -356,7 +370,8 @@
     search();
   }
 
-  const speOf = r => SPE && SPE[`${r.year}|${r.num}`];
+  // A N° reused for two theses holds one entry per author: never give one thesis the other's specialty.
+  const speOf = r => { const e = SPE && SPE[`${r.year}|${r.num}`]; return e && e.byAuthor ? e.byAuthor[person(r.author)] : e; };
 
   function highlight(text, terms) {
     let out = esc(text);
@@ -672,6 +687,10 @@
   let timer;
   $('q').addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(search, 120); });
   $('reload').addEventListener('click', () => start(true));
+  $('t2').addEventListener('click', () => {
+    const q = $('q').value.trim();
+    open(`${T2_SITE}/search${q ? `?search=${encodeURIComponent(q)}` : ''}`, '_blank', 'noopener');
+  });
   $('hide').addEventListener('click', () => { host.remove(); foot.remove(); });
   $('todiag').addEventListener('click', () => foot.scrollIntoView({ behavior: 'smooth' }));
   const pin = slot => { const y = +slot.dataset.year; FILTER.year = FILTER.year === y ? null : y; search(); };
@@ -703,6 +722,6 @@
     search();
   });
 
-  loadSpecialties().then(m => { SPE = m; OPT_OF = {}; for (const v of Object.values(m)) OPT_OF[v.spe] = v.opt; }).catch(e => { SPE_ERR = e.message; }).finally(() => { if (DATA.rows.length) search(); });
+  loadSpecialties().then(m => { SPE = m; OPT_OF = {}; for (const v of Object.values(m)) for (const e of v.byAuthor ? Object.values(v.byAuthor) : [v]) OPT_OF[e.spe] = e.opt; }).catch(e => { SPE_ERR = e.message; }).finally(() => { if (DATA.rows.length) search(); });
   start(false);
 })();
