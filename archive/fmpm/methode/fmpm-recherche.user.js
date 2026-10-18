@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         FMPM thèses — recherche en ligne + export CSV
 // @namespace    https://github.com/achma-learning/these
-// @version      1.0.2
+// @version      1.1.0
 // @description  Ajoute une barre de recherche au catalogue officiel des thèses FMPM (toutes les années, lues en direct sur le site) et exporte le CSV brut pour mettre à jour la copie locale du dépôt.
 // @match        https://wd.fmpm.uca.ma/biblio/theses/*
 // @match        http://wd.fmpm.uca.ma/biblio/theses/*
@@ -145,6 +145,10 @@
     button { font: inherit; padding: 7px 12px; border: 1px solid #2a78d6; border-radius: 6px; background: #fff; color: #2a78d6; cursor: pointer; }
     button:hover { background: #eef4fc; }
     .meta { color: #555; font-size: 12.5px; margin-top: 6px; }
+    .nav { margin-top: 6px; gap: 4px; font-size: 12.5px; }
+    .nav a { text-decoration: none; padding: 1px 6px; border-radius: 10px; border: 1px solid #d5d8de; color: #2a78d6; }
+    .nav a.on { background: #2a78d6; color: #fff; border-color: #2a78d6; }
+    .nav a.home { border-color: #2a78d6; font-weight: 600; }
     ol { margin: 8px 0 0; padding-left: 0; list-style: none; max-height: 60vh; overflow: auto; }
     li { padding: 6px 0; border-top: 1px solid #eee; }
     .t { font-weight: 600; }
@@ -164,11 +168,80 @@
       <button id="t2" title="Même recherche sur These2.0 (thesefmpm3.vercel.app) : jury, spécialités, statistiques ; mis à jour chaque jour">These2.0 ↗</button>
       <button id="hide" title="Masquer">✕</button>
     </div>
+    <div class="row nav" id="nav"></div>
     <div class="meta" id="meta">Chargement…</div>
+    <div class="meta" id="yearinfo"></div>
     <details id="det"><summary>Thèses par année (site officiel)</summary><div id="years"></div></details>
     <ol id="res"></ol>
   </div>`;
   const $ = id => root.getElementById(id);
+
+  // ---- Year pages (annee-htm/AAAA.htm) and home ------------------------------------------------------------
+  // The site's own year links are stale: the 2007-2014 pages stop at 2022, and on 2026.htm « 2026 » opens 2025.htm.
+  const PAGE_YEAR = Number((location.pathname.match(/\/annee-htm\/(\d{4})\.htm$/i) || [])[1]) || null;
+  const HOME = new URL('/biblio/theses/Accueil.html', location.href).href;
+  let pageSpe = null;                                            // set by the diagrams script (specialty per thesis)
+  function renderNav(lastYear) {
+    let s = `<a class="home" href="${HOME}" title="Page d'accueil des thèses FMPM">🏠 Accueil</a>`;
+    for (let y = FIRST_YEAR; y <= lastYear; y++)
+      s += `<a class="yr${y === PAGE_YEAR ? ' on' : ''}" href="${new URL(`${y}.htm`, BASE).href}">${y}</a>`;
+    $('nav').innerHTML = s;
+  }
+  // What the official list of this year says, and its oddities (numbers reused, one thesis under two numbers).
+  function yearReport(rows) {
+    const nums = rows.map(r => +r.num), max = Math.max(0, ...nums), have = new Set(nums);
+    const byNum = new Map(), byThesis = new Map();
+    for (const r of rows) {
+      byNum.set(+r.num, [...(byNum.get(+r.num) || []), r]);
+      const k = `${person(r.author)}|${norm(r.title)}`;
+      byThesis.set(k, [...(byThesis.get(k) || []), r]);
+    }
+    return {
+      n: rows.length, max, missing: max - have.size,
+      shared: [...byNum].filter(([, rs]) => new Set(rs.map(r => person(r.author))).size > 1).map(([n]) => n),
+      twice: [...byThesis.values()].filter(rs => rs.length > 1),
+    };
+  }
+  function renderYearInfo() {
+    if (!PAGE_YEAR) return;
+    const rows = DATA.rows.filter(r => r.year === PAGE_YEAR);
+    if (!rows.length) { $('yearinfo').textContent = ''; return; }
+    const y = yearReport(rows);
+    $('yearinfo').innerHTML = `<b>${PAGE_YEAR}</b> : ${y.n} thèses en ligne, n° 1 à ${y.max}` +
+      (y.missing > 0 ? ` — <span title="Numéros absents de la liste : thèses soutenues pas encore mises en ligne, ou numéros sautés">${y.missing} n° pas (encore) en ligne</span>` : '') +
+      (y.shared.length ? ` · n° donné à deux thèses : ${y.shared.join(', ')}` : '') +
+      (y.twice.length ? ` · même thèse sous deux n° : ${y.twice.map(rs => `${esc(rs[0].author)} (${rs.map(r => r.num).join(', ')})`).join(' ; ')}` : '');
+  }
+  // Labels in the official table: specialty (diagrams script) and warnings about the numbering.
+  function annotatePage() {
+    if (!PAGE_YEAR) return;
+    const rows = DATA.rows.filter(r => r.year === PAGE_YEAR), y = yearReport(rows);
+    const twiceOf = new Map(y.twice.flatMap(rs => rs.map(r => [`${r.num}|${person(r.author)}`, rs.filter(o => o !== r).map(o => o.num)])));
+    document.querySelectorAll('.fmpm-badges').forEach(e => e.remove());
+    for (const tr of document.querySelectorAll('tr')) {
+      const cells = [...tr.children].filter(c => c.tagName === 'TD' || c.tagName === 'TH');
+      if (cells.length < 3 || !/^\d+$/.test(clean(cells[0].textContent))) continue;
+      const num = String(Number(clean(cells[0].textContent))), who = person(cells[1].textContent);
+      const r = rows.find(x => x.num === num && person(x.author) === who);
+      if (!r) continue;
+      const tag = (txt, title, bg) => `<span title="${esc(title)}" style="display:inline-block;margin:3px 4px 0 0;padding:0 6px;border-radius:9px;font:11px/1.6 system-ui,sans-serif;background:${bg};color:#111">${esc(txt)}</span>`;
+      let html = '';
+      const s = pageSpe && pageSpe(r);
+      if (s) html += tag(`${s.spe}${s.st === 'confirmée' || s.st === 'vérifiée' ? '' : ' ?'}`, `Spécialité FMPM (classement achma-learning/theses-maroc) : ${s.st}${s.conf != null ? `, confiance ${Math.round(100 * s.conf)} %` : ''}`, '#dbe8fb');
+      if (y.shared.includes(+num)) html += tag('⚠ n° partagé', `Le n° ${num} est donné à deux thèses différentes dans la liste officielle (même lien PDF)`, '#fde7c8');
+      const other = twiceOf.get(`${num}|${who}`);
+      if (other) html += tag(`⚠ aussi n° ${other.join(', ')}`, 'La même thèse (auteur + titre) figure sous un autre numéro dans la liste officielle', '#fde7c8');
+      if (html) cells[2].insertAdjacentHTML('beforeend', `<div class="fmpm-badges">${html}</div>`);
+    }
+  }
+  renderNav(new Date().getFullYear());
+  if (PAGE_YEAR) {
+    // Year pages pin #masthead and #pagecell1 with position:absolute (table at top:200px, height 4948px, its own
+    // scrollbar): put them back in the page flow, so the bar above and the charts below don't cover the table.
+    const st = document.createElement('style');
+    st.textContent = '#masthead,#pagecell1{position:static!important;width:auto!important;height:auto!important;margin:8px 29px!important;overflow:visible!important}';
+    document.head.append(st);
+  }
 
   let DATA = { rows: [], perYear: {}, at: 0 };
   let INDEX = [];
@@ -184,6 +257,8 @@
         return typeof v === 'string' ? `<tr><td>${y}</td><td colspan="3">${esc(v)}</td></tr>`
           : `<tr><td>${y}</td><td>${v.theses}</td><td>${v.sansPDF}</td><td>${v.nMax}</td></tr>`;
       }).join('') + '</table>';
+    renderYearInfo();
+    annotatePage();
     search();
   }
 
