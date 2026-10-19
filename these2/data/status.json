@@ -1,8 +1,8 @@
 {
- "checkedAt": "2026-10-16T19:55+00:00",
- "dataChangedAt": "2026-10-16T19:53+00:00",
- "changed": false,
- "theses": 4014,
+ "checkedAt": "2026-10-19T09:58+00:00",
+ "dataChangedAt": "2026-10-19T09:58+00:00",
+ "changed": true,
+ "theses": 4018,
  "officialSource": "site",
  "officialPerYear": {
   "2006": 2,
@@ -22,15 +22,18 @@
   "2020": 242,
   "2021": 242,
   "2022": 374,
-  "2023": 415,
+  "2023": 414,
   "2024": 395,
-  "2025": 174,
+  "2025": 173,
   "2026": 117
  },
  "specialiteSources": {
-  "rapporteur": 223,
-  "catalogue": 3158,
-  "none": 197,
-  "titre": 436
+  "confirmée": 3533,
+  "probable": 469,
+  "à vérifier": 3,
+  "catalogue": 7,
+  "titre": 2,
+  "none": 3,
+  "rapporteur": 1
  }
 }
