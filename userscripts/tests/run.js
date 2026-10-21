@@ -233,23 +233,42 @@ async function offline(browser) {
     eq(await bar(page, r => r.getElementById('warn').hidden), true, 'avertissement levé');
   });
 
-  await test('anomalies : page sans tableau, liste réduite de moitié → ancienne copie ; « Vider le cache » accepte', async () => {
-    Object.assign(ctx.fake.years, { 2014: '<html><body><p>Site en maintenance</p></body></html>', 2026: synth(2026) });
+  await test('anomalies : page sans tableau, tableau vidé, liste réduite de moitié → ancienne copie ; « Accepter » pour une seule année', async () => {
+    const headerOnly = synth(2006, 0);                              // header row kept, theses gone (rows turned into divs…)
+    Object.assign(ctx.fake.years, { 2014: '<html><body><p>Site en maintenance</p></body></html>', 2026: synth(2026), 2006: headerOnly });
     await bar(page, r => r.getElementById('reload').click());
     await waitIdle(page);
     eq(await metaCount(page), total(2026), 'aucune thèse perdue');
     const diag = await bar(page, r => r.getElementById('diagbody').textContent);
-    assert(/aucun tableau de thèses reconnu/.test(diag), 'anomalie 2014 décrite');
-    assert(/3 thèse\(s\) lue\(s\) au lieu de 117/.test(diag), 'anomalie 2026 décrite');
-    await bar(page, r => r.querySelector('[data-act="clear"]').click());
+    assert(/aucun tableau de thèses reconnu/.test(diag), 'anomalie 2014 décrite (pas de tableau)');
+    assert(/3 thèse\(s\) lue\(s\) au lieu de 117/.test(diag), 'anomalie 2026 décrite (moitié perdue)');
+    assert(/0 thèse\(s\) lue\(s\) au lieu de 3/.test(diag), 'anomalie 2006 décrite (tableau vidé, petite année)');
+    assert(/st-err/.test((await navInfo(page)).find(a => a.t === '2006').c), 'ruban : 2006 en anomalie, pas « à jour »');
+    eq(await bar(page, r => [...r.querySelectorAll('[data-act="accept"]')].map(b => b.dataset.year)), ['2026', '2006'], 'boutons « Accepter »');
+    await bar(page, r => r.querySelector('[data-act="accept"][data-year="2026"]').click());
     await waitIdle(page);
-    eq(await metaCount(page), total(2026, [2014, 2026]) + SYNTH_ROWS, 'après vidage : 2026 réduite acceptée, 2014 absente');
+    eq(await metaCount(page), total(2026, [2026]) + SYNTH_ROWS, '2026 réduite acceptée ; 2014 et 2006 gardent leur copie');
     ctx.fake.years = {};
     await bar(page, r => r.getElementById('reload').click());
     await waitIdle(page);
     eq(await metaCount(page), total(2026), 'retour à la normale');
   });
-  await page.close();
+
+  await test('pendant une lecture : CSV brut refusé, « Vider le cache » attend puis relit tout', async () => {
+    ctx.fake.log.length = 0;
+    await bar(page, r => r.getElementById('reload').click());
+    await page.waitForTimeout(1200);                                // a few years read, many left
+    await bar(page, r => r.getElementById('export').click());
+    assert(/Lecture du site en cours/.test(await bar(page, r => r.getElementById('meta').textContent)), 'export refusé pendant la lecture');
+    await bar(page, r => r.querySelector('[data-act="clear"]').click());
+    await page.waitForTimeout(500);
+    await waitIdle(page, 120000);                                   // the running load, then the full re-read, with no idle gap
+    eq(await metaCount(page), total(2026), 'toutes les thèses après vidage pendant la lecture');
+    const nav = await navInfo(page);
+    assert(nav.slice(1).every(a => /st-ok/.test(a.c)), `toutes les années relues : ${nav.filter(a => !/st-ok|home/.test(a.c)).map(a => a.t)}`);
+    eq(yearsLog(ctx).length, 42, 'la lecture en cours (21) puis une relecture complète (21)');
+  });
+  if (page) await page.close();                                   // undefined when --grep skipped the first test
 
   await test('page annuelle 2026 : résumé, mise en page, étiquettes, #n36, aucune requête pour 2026', async () => {
     const c = await fakeContext(browser, T2026);
@@ -331,6 +350,29 @@ async function offline(browser) {
     await c.close();
   });
 
+  await test('n° partagé avec une seule ligne dans le fichier des spécialités : pas de spécialité volée, pas de fiche ambiguë', async () => {
+    const c = await fakeContext(browser, T2026);
+    c.fake.spe = FIX('specialites-extrait.csv').toString('utf8').split('\n').filter(l => !/^2026,36,BADRAN/.test(l)).join('\n');
+    assert(!/^2026,36,BADRAN/m.test(c.fake.spe) && /^2026,36,CHEKROUNI/m.test(c.fake.spe), 'extrait modifié');
+    const p = await openWith(c, `${SITE}annee-htm/2026.htm`, 'v2');
+    await waitIdle(p);
+    await p.waitForFunction(() => document.querySelectorAll('.fmpm-u-badges').length > 100);
+    const rows36 = await p.evaluate(() => [...document.querySelectorAll('tr')].filter(tr => (tr.querySelector('td,th')?.textContent || '').trim().replace(/^0+/, '') === '36')
+      .map(tr => ({ who: tr.children[1].textContent.trim(), badges: tr.querySelector('.fmpm-u-badges')?.textContent || '' })));
+    const badran = rows36.find(r => /BADRAN/i.test(r.who)), chek = rows36.find(r => /CHEKROUNI/i.test(r.who));
+    assert(badran && !/Chirurgie générale/.test(badran.badges), `BADRAN sans la spécialité de CHEKROUNI : ${badran && badran.badges}`);
+    assert(chek && /Chirurgie générale/.test(chek.badges), `CHEKROUNI garde la sienne : ${chek && chek.badges}`);
+    await bar(p, r => { const q = r.getElementById('q'); q.value = 'chekrouni'; q.dispatchEvent(new Event('input')); });
+    await p.waitForTimeout(400);
+    const { text } = await downloadText(p, () => bar(p, r => r.getElementById('export2').click()));
+    const lines = text.split('\n').filter(l => /CHEKROUNI/i.test(l));
+    const l36 = lines.find(l => /^2026,36,/.test(l)), l100 = lines.find(l => /^2026,100,/.test(l));
+    assert(l36 && !/thesefmpm3/.test(l36), `n° 36 (partagé) : pas de fiche These2.0 — ${l36}`);
+    assert(l100 && /thesefmpm3\.vercel\.app\/these\/these100-26/.test(l100), `n° 100 : fiche — ${l100}`);
+    eq(c.fake.errors, [], 'erreurs JavaScript');
+    await c.close();
+  });
+
   await test('cohabitation : v2 deux fois = une barre ; v0.1 puis v2 = v2 remplace ; v2 puis v0.1 = v0.1 s’arrête', async () => {
     const c = await fakeContext(browser, T2026);
     const p = await openWith(c, `${SITE}Accueil.html`, 'v2', 'v2');
@@ -339,7 +381,7 @@ async function offline(browser) {
     const p2 = await openWith(c, `${SITE}annee-htm/2026.htm`, 'v01');
     await p2.waitForTimeout(300);
     await p2.addScriptTag({ content: CODE.v2 });
-    eq(await p2.evaluate(() => [...document.querySelectorAll('#fmpm-search-host')].map(h => h.dataset.version)), ['2.0.0'], 'barre de v2 seule');
+    eq(await p2.evaluate(() => [...document.querySelectorAll('#fmpm-search-host')].map(h => h.dataset.version)), ['2.0.1'], 'barre de v2 seule');
     await p2.waitForFunction(() => document.querySelectorAll('.fmpm-u-badges').length > 100, null, { timeout: 30000 });
     await p2.waitForTimeout(12000);                                  // v0.1 finishes its own load and labels the table
     eq(await p2.evaluate(() => document.querySelectorAll('.fmpm-badges').length), 0, 'étiquettes de v0.1 retirées');
@@ -369,7 +411,7 @@ async function offline(browser) {
     const prev = fixtureNums.filter(n => n < 36).pop(), next = fixtureNums.find(n => n > 36);
     assert(acts[0][0] === `‹ n° ${prev}` && acts[0][1].endsWith(`/these${String(prev).padStart(2, '0')}-26.pdf`), `précédente : ${acts[0]}`);
     assert(acts[1][0] === `n° ${next} ›` && acts[1][1].endsWith(`/these${String(next).padStart(2, '0')}-26.pdf`), `suivante : ${acts[1]}`);
-    assert(acts.some(([t, h]) => /These2.0/.test(t) && h === 'https://thesefmpm3.vercel.app/these/these36-26'), 'fiche These2.0');
+    assert(!acts.some(([t]) => /These2.0/.test(t)), 'pas de fiche These2.0 pour un PDF partagé par deux thèses (elle montrerait l’une pour l’autre)');
     const nav = await dock(r => [...r.querySelectorAll('#nav a')].map(a => a.textContent));
     eq(nav, ['🏠 Accueil', ...Array.from({ length: 21 }, (_, i) => String(2006 + i))], 'ruban des années');
     await p.reload(); await p.addScriptTag({ content: CODE.v2 });
@@ -382,6 +424,8 @@ async function offline(browser) {
     await dock(r => r.getElementById('tog').click());
     await p.waitForFunction(() => document.getElementById('fmpm-ultra-dock').shadowRoot.querySelector('#acts a'));
     assert(/aucune/.test(await dock(r => r.querySelector('#acts a').textContent)), 'première thèse : pas de précédente');
+    const id = `these${String(fixtureNums[0]).padStart(2, '0')}-26`;
+    assert(await dock((r, a) => [...r.querySelectorAll('#acts a')].some(x => x.href === `https://thesefmpm3.vercel.app/these/${a}`), id), 'fiche These2.0 d’une thèse non partagée');
     eq(c.fake.errors, [], 'erreurs JavaScript');
     await c.close();
   });

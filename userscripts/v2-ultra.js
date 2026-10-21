@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         FMPM thèses — Ultra : recherche, diagrammes, années, PDF
 // @namespace    https://github.com/achma-learning/these
-// @version      2.0.0
+// @version      2.0.1
 // @description  Catalogue officiel des thèses FMPM : recherche dans toutes les années (lues en direct), ruban 🏠 Accueil + 2006 → année en cours (suit le calendrier), résumé et étiquettes sur chaque page annuelle, diagrammes (spécialités FMPM, type d'étude, hôpitaux, langue, mots), exports CSV, diagnostic. Sur les PDF de thèse : un petit bouton pour revenir à l'accueil, à la liste de l'année, ou passer à la thèse précédente / suivante.
 // @homepageURL  https://github.com/achma-learning/theses-maroc/tree/main/userscripts
 // @match        https://wd.fmpm.uca.ma/biblio/theses/*
@@ -18,7 +18,7 @@
  *    faculté n'a pas mis 2027.htm en ligne, l'année est grisée « pas encore publiée ».
  *  - Cache par année (localStorage) : un échec n'efface jamais une bonne copie, il est signalé et l'ancienne
  *    copie est utilisée ; une liste qui perd plus de la moitié de ses lignes est une anomalie (ancienne copie
- *    gardée, « Vider le cache » pour accepter la nouvelle). Années récentes relues toutes les 12 h, anciennes
+ *    gardée, bouton « Accepter » de l'année dans le diagnostic pour prendre la nouvelle). Années récentes relues toutes les 12 h, anciennes
  *    tous les 7 jours, erreurs réessayées après 15 min. Une page à la fois, pause 400 ms, délai max 20 s.
  *  - États d'une année : à jour · copie ancienne · pas encore publiée (404) · erreur (réseau, délai, HTTP)
  *    · anomalie (page lue mais aucun tableau de thèses reconnu). Panneau « Diagnostic » : état de chaque
@@ -38,7 +38,7 @@
  */
 (function () {
   'use strict';
-  const VERSION = '2.0.0';
+  const VERSION = '2.0.1';
   const D = document;
   if (!D.body || D.documentElement.hasAttribute('data-fmpm-ultra')) return; // no page, or already running
   D.documentElement.setAttribute('data-fmpm-ultra', VERSION);
@@ -143,7 +143,9 @@
       rows.push({ year: y, num: String(Number(num)), author, title,
         pdf: links.find(h => /\/FT\//i.test(h)) || '', article: links.find(h => /\/art\//i.test(h)) || '' });
     }
-    return { rows, bad, looksLikeList: /auteur|titre|th[eè]se/i.test(doc.body ? doc.body.textContent : '') };
+    // Every year page has a header row « ORD | AUTEUR | TITRE | TELECHARGER »: without it, the layout changed.
+    const looksLikeList = [...doc.querySelectorAll('tr')].some(tr => /auteur/i.test(tr.textContent) && /titre/i.test(tr.textContent));
+    return { rows, bad, looksLikeList };
   }
 
   // Never throws: { status: ok | empty | missing | error | anomaly, rows?, enc?, http?, detail }.
@@ -172,19 +174,22 @@
   const pack = r => [r.num, r.author, r.title, rel(r.pdf), rel(r.article)];
   const unpack = (y, a) => ({ year: y, num: a[0], author: a[1], title: a[2], pdf: abs(a[3]), article: abs(a[4]) });
 
-  // Cache entry of a year = { v, good: last good copy { at, rows, enc } | null, last: last attempt }.
-  // A failed attempt never replaces a good copy; a list that suddenly loses half its lines is not trusted.
+  // Cache entry of a year = { v, good: last good copy { at, rows, enc } | null, last: last attempt, accept? }.
+  // A failed attempt never replaces a good copy; a list that suddenly loses half its lines (or all of them) is
+  // not trusted until the user accepts it for that year (button « Accepter » of the diagnostic → accept: true).
   function merge(prev, res, now = Date.now()) {
     let good = prev && prev.good || null;
     const last = { at: now, status: res.status, detail: res.detail || '', http: res.http || 0 };
-    if (res.status === 'ok' || res.status === 'empty') {
+    const read = res.status === 'ok' || res.status === 'empty', accept = !!(prev && prev.accept);
+    if (read) {
       const before = good ? good.rows.length : 0, after = res.rows.length;
-      if (before >= 20 && after < before * 0.5) {
+      if (!accept && ((before >= 20 && after < before * 0.5) || (before > 0 && after === 0))) {
         last.status = 'anomaly';
-        last.detail = `${after} thèse(s) lue(s) au lieu de ${before} : ancienne copie gardée (« Vider le cache » pour accepter la nouvelle liste)`;
+        last.shrunk = after;
+        last.detail = `${after} thèse(s) lue(s) au lieu de ${before} : ancienne copie gardée (« Accepter » dans le diagnostic pour prendre la nouvelle liste)`;
       } else good = { at: now, rows: res.rows.map(pack), enc: res.enc || '' };
     }
-    return { v: 1, good, last };
+    return accept && !read ? { v: 1, good, last, accept } : { v: 1, good, last };
   }
 
   const ttlFor = y => y >= LAST_YEAR - 1 ? TTL_RECENT : TTL_OLD;
@@ -222,7 +227,7 @@
         (g ? ` — copie du ${day(g.at)} utilisée` : ' — aucune copie');
     }
     const nums = g ? g.rows.map(a => +a[0]) : [];
-    return { y, code, label, n, detail: l.detail, status: l.status, goodAt: g && g.at, lastAt: l.at, enc: g && g.enc,
+    return { y, code, label, n, detail: l.detail, status: l.status, shrunk: l.status === 'anomaly' ? l.shrunk : undefined, goodAt: g && g.at, lastAt: l.at, enc: g && g.enc,
       max: nums.length ? Math.max(...nums) : 0, noPdf: g ? g.rows.filter(a => !a[3]).length : 0 };
   }
   const isProblem = v => v.code === 'err' || (v.code === 'none' && v.y < LAST_YEAR);
@@ -298,11 +303,18 @@
     return { map, optOf };
   }
 
-  let SPE = null, OPT_OF = {}, SPE_INFO = { status: 'loading', detail: '' };
+  let SPE = null, OPT_OF = {}, SPE_INFO = { status: 'loading', detail: '' }, FLAGS = new Map();
+  // The specialties file lags behind the site: a N° that the site has just given to a second thesis still has
+  // one row there. That row then belongs to its own author only — never give one thesis the other's specialty.
   const speOf = r => {
-    const e = SPE && SPE[`${r.year}|${r.num}`], x = e && e.byAuthor ? e.byAuthor[person(r.author)] : e;
+    const e = SPE && SPE[`${r.year}|${r.num}`];
+    let x = e && e.byAuthor ? e.byAuthor[person(r.author)] : e;
+    if (x && !e.byAuthor && x.who !== person(r.author) && (FLAGS.get(rowKey(r)) || {}).shared) x = null;
     return x && x.spe ? x : null;
   };
+  // These2.0 finds a thesis by its PDF name: for the two theses of a shared N° (same PDF) it would show one
+  // of them for both, so no fiche link there.
+  const ficheOf = r => (FLAGS.get(rowKey(r)) || {}).shared ? '' : ficheUrl(r);
   function useSpe(c, status, detail = '') {
     const b = buildSpeMap(c.rows);
     SPE = b.map; OPT_OF = b.optOf;
@@ -406,7 +418,7 @@
   D.querySelectorAll('.fmpm-badges').forEach(e => e.remove());
 
   // ---- Data state -------------------------------------------------------------------------------------------
-  let DATA = { rows: [], at: 0, atMax: 0 }, INDEX = [], FLAGS = new Map(), REPORTS = new Map();
+  let DATA = { rows: [], at: 0, atMax: 0 }, INDEX = [], REPORTS = new Map();
   let PROGRESS = '', LOADING = null, LAST_HITS = [];
   const FILTER = { year: PAGE_YEAR, spe: null, opt: null };             // on a year page the charts open on that year
   let MODE = 'principal';                                          // 'principal' | 'fractionnel'
@@ -440,11 +452,17 @@
     ({ flags: FLAGS, reports: REPORTS } = flagsFor(rows));
   }
 
-  // Newest year first; one page at a time. mode: 'auto' (what is due) | 'all' | 'failed'.
+  // Newest year first; one page at a time. mode: 'auto' (what is due) | 'all' | 'failed' | [years].
+  // Asked during a load, 'all' / 'failed' / [years] run right after it (once, however many clicks).
+  const QUEUED = {};
   function refresh(mode) {
-    if (LOADING) return LOADING;
+    if (LOADING) {
+      if (mode === 'auto') return LOADING;
+      const k = String(mode);
+      return QUEUED[k] || (QUEUED[k] = LOADING.then(() => { delete QUEUED[k]; return refresh(mode); }));
+    }
     const now = Date.now();
-    const todo = YEARS_ALL.slice().reverse().filter(y => mode === 'all' ? true
+    const todo = Array.isArray(mode) ? mode.slice() : YEARS_ALL.slice().reverse().filter(y => mode === 'all' ? true
       : mode === 'failed' ? (!YEARS[y] || isProblem(yearView(y)) || yearView(y).code === 'none') : needsFetch(YEARS[y], y, now));
     if (!todo.length) { render(); return Promise.resolve(); }
     LOADING = (async () => {
@@ -456,6 +474,7 @@
           if (validEntry(other) && !needsFetch(other, y)) { YEARS[y] = other; scheduleRender(); continue; }
         }
         PROGRESS = `Lecture ${y}… (${i}/${todo.length})`;
+        $('reload').disabled = true;
         renderMeta();
         YEARS[y] = merge(YEARS[y], await fetchYear(y));
         store.set(`year:${y}`, YEARS[y]);
@@ -558,7 +577,8 @@
     $('diagbody').innerHTML = `<p>Années suivies : ${FIRST_YEAR}–${LAST_YEAR} (année de l’horloge : ${LAST_YEAR}) · relues toutes les 12 h (${LAST_YEAR - 1}–${LAST_YEAR}) ou 7 jours (avant), erreurs après 15 min · stockage local : ${store.ok ? 'ok' : 'plein ou bloqué'}.</p>` +
       '<table><tr><th>Année</th><th class="l">État</th><th>Thèses</th><th>N° max</th><th>Sans PDF</th><th>Copie du</th><th>Dernier essai</th><th class="l">Détail</th></tr>' +
       rows.map(v => `<tr class="st-${v.code}"><td>${v.y}</td><td class="l">${esc(v.label)}</td><td>${v.n ? fmt(v.n) : '—'}</td><td>${v.max || '—'}</td><td>${v.n ? v.noPdf : '—'}</td>` +
-        `<td>${v.goodAt ? stamp(v.goodAt) : '—'}</td><td>${v.lastAt ? stamp(v.lastAt) : '—'}</td><td class="l">${esc(v.detail || '')}${v.enc ? ` <small>(${esc(v.enc)})</small>` : ''}</td></tr>`).join('') +
+        `<td>${v.goodAt ? stamp(v.goodAt) : '—'}</td><td>${v.lastAt ? stamp(v.lastAt) : '—'}</td><td class="l">${esc(v.detail || '')}${v.enc ? ` <small>(${esc(v.enc)})</small>` : ''}` +
+        (v.shrunk != null && v.n ? ` <button data-act="accept" data-year="${v.y}" title="Relire ${v.y} et garder la nouvelle liste, même plus courte (les autres années ne changent pas)">Accepter la nouvelle liste</button>` : '') + '</td></tr>').join('') +
       `</table><p>Spécialités (${esc(SPE_URL.replace('https://', ''))}) : ${spe}.</p>`;
   }
   function diagText() {
@@ -646,7 +666,7 @@
     const raw = query.split(/\s+/);
     $('res').innerHTML = !active ? '' : `<li><em>${hits.length} résultat(s)${hits.length > MAX_SHOWN ? ` — ${MAX_SHOWN} premiers affichés (tous dans « CSV résultats »)` : ''}</em></li>` +
       hits.slice(0, MAX_SHOWN).map(r => {
-        const s = speOf(r), f = FLAGS.get(rowKey(r)), fiche = ficheUrl(r);
+        const s = speOf(r), f = FLAGS.get(rowKey(r)), fiche = ficheOf(r);
         return `<li>
         <div class="t">${highlight(r.title, raw)}</div>
         <div class="a">${r.year} · n° ${esc(r.num)} · ${highlight(r.author, raw)}
@@ -1056,8 +1076,9 @@
   $('todiag').addEventListener('click', () => foot.scrollIntoView({ behavior: 'smooth' }));
   $('chips').addEventListener('click', e => { const c = e.target.closest('[data-f]'); if (c) { FILTER[c.dataset.f] = null; search(); } });
   $('export').addEventListener('click', () => {
+    if (LOADING) { $('meta').textContent = `Lecture du site en cours (${PROGRESS.replace(/^Lecture /, '')}) : le CSV brut sera complet à la fin, réessayez dans un instant.`; return; }
     if (!DATA.rows.length) { $('meta').textContent = 'Rien à exporter : chargez d\'abord les données.'; return; }
-    const d = new Date().toISOString().slice(0, 10), gaps = YEARS_ALL.map(yearView).filter(v => isProblem(v) && !v.n).map(v => v.y);
+    const d = new Date().toISOString().slice(0, 10), gaps = YEARS_ALL.map(yearView).filter(v => (isProblem(v) || v.code === 'unknown') && !v.n).map(v => v.y);
     download(`fmpm-officiel-brut-${d}.csv`, toCSV(HEADER, byYearNum(DATA.rows).map(rawLine)));
     $('meta').textContent = `Exporté : fmpm-officiel-brut-${d}.csv (${DATA.rows.length} lignes). Étape suivante : build_fmpm.py (voir archive/fmpm/methode/README.md).` +
       (gaps.length ? ` ⚠ Années absentes de l'export (non lues) : ${gaps.join(', ')}.` : '');
@@ -1067,17 +1088,26 @@
     const d = new Date().toISOString().slice(0, 10);
     download(`fmpm-resultats-${d}.csv`, toCSV(HEADER_PLUS, byYearNum(LAST_HITS).map(r => {
       const s = speOf(r);
-      return rawLine(r).concat([s ? s.spe : '', s ? s.opt : '', s ? s.st : '', s && s.conf != null ? String(s.conf) : '', s ? s.sec : '', flagText(FLAGS.get(rowKey(r))), ficheUrl(r)]);
+      return rawLine(r).concat([s ? s.spe : '', s ? s.opt : '', s ? s.st : '', s && s.conf != null ? String(s.conf) : '', s ? s.sec : '', flagText(FLAGS.get(rowKey(r))), ficheOf(r)]);
     })));
-    $('meta').textContent = `Exporté : fmpm-resultats-${d}.csv (${LAST_HITS.length} lignes, avec spécialité, statut et signalements).`;
+    $('meta').textContent = `Exporté : fmpm-resultats-${d}.csv (${LAST_HITS.length} lignes, avec spécialité, statut et signalements)` +
+      (LOADING ? ' — ⚠ lecture du site en cours : résultats partiels.' : '.');
   });
   root.addEventListener('click', async e => {
     const b = e.target.closest('[data-act]');
     if (!b) return;
     const act = b.dataset.act;
     if (act === 'failed' || act === 'all') { refresh(act); render(); }
-    else if (act === 'clear') {
-      if (!confirm('Effacer les copies locales des listes et des spécialités, puis tout relire sur le site ?')) return;
+    else if (act === 'accept') {
+      const y = +b.dataset.year;
+      if (!YEARS[y]) return;
+      YEARS[y] = Object.assign({}, YEARS[y], { accept: true });
+      store.set(`year:${y}`, YEARS[y]);
+      refresh([y]); render();
+    } else if (act === 'clear') {
+      if (!confirm('Effacer toutes les copies locales (listes et spécialités) et tout relire sur le site ?\n' +
+        'Une année qui ne répond pas pendant la relecture sera absente jusqu’au prochain succès.')) return;
+      if (LOADING) await LOADING;                                  // the running load would otherwise refill what we clear
       store.clear();
       for (const y of Object.keys(YEARS)) delete YEARS[y];
       await refresh('all');
@@ -1232,6 +1262,7 @@
       const mine = rows.filter(r => link(r) && pathKey(link(r)) === here);
       const cur = mine.length ? mine : fileNum ? rows.filter(r => +r.num === fileNum) : [];
       const { flags } = flagsFor(rows);
+      FLAGS = flags;
       const seq = [], seen = new Set();                            // reading order: N° ascending, one stop per file
       for (const r of rows.slice().sort((a, b) => a.num - b.num)) {
         const l = link(r);
@@ -1254,7 +1285,7 @@
           }).join('');
       const step = (r, txt) => r ? `<a href="${esc(link(r))}" title="${esc(`n° ${r.num} · ${r.author} — ${r.title}`)}">${txt.replace('#', esc(r.num))}</a>`
         : `<a class="off" aria-disabled="true">${txt.replace('n° #', 'aucune')}</a>`;
-      const c0 = cur[0], fiche = c0 && ficheUrl(c0), other = c0 && (isArt ? c0.pdf : c0.article);
+      const c0 = cur[0], fiche = cur.length === 1 && ficheOf(c0), other = c0 && (isArt ? c0.pdf : c0.article);
       R('acts').innerHTML = step(prev, '‹ n° #') + step(next, 'n° # ›') +
         (fiche ? `<a href="${esc(fiche)}" target="_blank" rel="noopener" title="Fiche These2.0 : jury, spécialité">Fiche These2.0 ↗</a>` : '') +
         (other ? `<a href="${esc(other)}">${isArt ? 'Texte intégral' : 'Résumé (article)'}</a>` : '') +
