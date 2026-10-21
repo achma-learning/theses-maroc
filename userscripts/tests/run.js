@@ -69,7 +69,7 @@ function fakeDate(offset) {
   globalThis.Date = FakeDate;
 }
 
-// ctx.fake = { years: { 2019: 'abort' | 500 | '<html…>' }, missingPdf: Set, spe: 'abort' | 500 | text, log: [] }
+// ctx.fake = { years: { 2019: 'abort' | 500 | '<html…>' | Buffer }, missingPdf: Set, spe: 'abort' | 500 | text, log: [] }
 async function fakeContext(browser, now, lastPublished = 2026) {
   const ctx = await browser.newContext({ viewport: { width: 1300, height: 900 }, acceptDownloads: true, locale: 'fr-FR' });
   ctx.fake = { years: {}, missingPdf: new Set(), spe: null, log: [], errors: [] };
@@ -85,7 +85,7 @@ async function fakeContext(browser, now, lastPublished = 2026) {
       const y = +m[1], o = f.years[y];
       if (o === 'abort') return route.abort('failed');
       if (typeof o === 'number') return html(`<h1>Erreur ${o}</h1>`, o);
-      if (typeof o === 'string') return html(o);
+      if (typeof o === 'string' || Buffer.isBuffer(o)) return html(o);
       if (y > lastPublished || y < 2006) return html(NOT_FOUND, 404, 'text/html; charset=iso-8859-1');
       return html(FIXTURE_YEARS[y] ? FIX(FIXTURE_YEARS[y]) : synth(y));
     }
@@ -152,6 +152,7 @@ async function offline(browser) {
     for (const k of ['v01', 'v0']) {
       const h = CODE[k].split('==/UserScript==')[0];
       assert(/@exclude\s+https:\/\/wd\.fmpm\.uca\.ma\/biblio\/theses\/annee-htm\/FT\/\*/.test(h), `${SRC[k]} laisse les PDF tranquilles`);
+      assert(/@exclude\s+https:\/\/wd\.fmpm\.uca\.ma\/biblio\/theses\/annee-htm\/art\/\*/.test(h), `${SRC[k]} laisse les PDF de résumé (art/) tranquilles`);
     }
     const copy = path.join(US, '..', 'archive', 'fmpm', 'methode', 'fmpm-recherche.user.js');
     if (fs.existsSync(copy)) eq(fs.readFileSync(copy, 'utf8'), CODE.v0, 'archive/fmpm/methode/fmpm-recherche.user.js = v0-stable.js');
@@ -233,23 +234,43 @@ async function offline(browser) {
     eq(await bar(page, r => r.getElementById('warn').hidden), true, 'avertissement levé');
   });
 
-  await test('anomalies : page sans tableau, liste réduite de moitié → ancienne copie ; « Vider le cache » accepte', async () => {
-    Object.assign(ctx.fake.years, { 2014: '<html><body><p>Site en maintenance</p></body></html>', 2026: synth(2026) });
+  await test('anomalies : page sans tableau, tableau vidé, liste réduite de moitié → ancienne copie ; « Accepter » pour une seule année', async () => {
+    const headerOnly = synth(2006, 0);                              // header row kept, theses gone (rows turned into divs…)
+    Object.assign(ctx.fake.years, { 2014: '<html><body><p>Site en maintenance</p></body></html>', 2026: synth(2026), 2006: headerOnly });
     await bar(page, r => r.getElementById('reload').click());
     await waitIdle(page);
     eq(await metaCount(page), total(2026), 'aucune thèse perdue');
     const diag = await bar(page, r => r.getElementById('diagbody').textContent);
-    assert(/aucun tableau de thèses reconnu/.test(diag), 'anomalie 2014 décrite');
-    assert(/3 thèse\(s\) lue\(s\) au lieu de 117/.test(diag), 'anomalie 2026 décrite');
-    await bar(page, r => r.querySelector('[data-act="clear"]').click());
+    assert(/aucun tableau de thèses reconnu/.test(diag), 'anomalie 2014 décrite (pas de tableau)');
+    assert(/3 thèse\(s\) lue\(s\) au lieu de 117/.test(diag), 'anomalie 2026 décrite (moitié perdue)');
+    assert(/page en ligne sans aucune thèse, pour une année passée/.test(diag), 'anomalie 2006 décrite (tableau vidé, petite année passée)');
+    assert(/st-err/.test((await navInfo(page)).find(a => a.t === '2006').c), 'ruban : 2006 en anomalie, pas « à jour »');
+    eq(await bar(page, r => [...r.querySelectorAll('[data-act="accept"]')].map(b => b.dataset.year)), ['2026'], 'bouton « Accepter » pour la liste raccourcie seulement');
+    await bar(page, r => r.querySelector('[data-act="accept"][data-year="2026"]').click());
     await waitIdle(page);
-    eq(await metaCount(page), total(2026, [2014, 2026]) + SYNTH_ROWS, 'après vidage : 2026 réduite acceptée, 2014 absente');
+    eq(await metaCount(page), total(2026, [2026]) + SYNTH_ROWS, '2026 réduite acceptée ; 2014 et 2006 gardent leur copie');
     ctx.fake.years = {};
     await bar(page, r => r.getElementById('reload').click());
     await waitIdle(page);
     eq(await metaCount(page), total(2026), 'retour à la normale');
   });
-  await page.close();
+
+  await test('pendant une relecture : CSV brut des copies autorisé, « Vider le cache » attend puis relit tout', async () => {
+    ctx.fake.log.length = 0;
+    await bar(page, r => r.getElementById('reload').click());
+    await page.waitForTimeout(1200);                                // a few years read, many left
+    const { text } = await downloadText(page, () => bar(page, r => r.getElementById('export').click()));
+    eq(csvLines(text) - 1, total(2026), 'CSV brut complet (copies locales) pendant la relecture');
+    assert(/copies locales exportées/.test(await bar(page, r => r.getElementById('meta').textContent)), 'export signalé comme fait pendant la relecture');
+    await bar(page, r => r.querySelector('[data-act="clear"]').click());
+    await page.waitForTimeout(500);
+    await waitIdle(page, 120000);                                   // the running load, then the full re-read, with no idle gap
+    eq(await metaCount(page), total(2026), 'toutes les thèses après vidage pendant la lecture');
+    const nav = await navInfo(page);
+    assert(nav.slice(1).every(a => /st-ok/.test(a.c)), `toutes les années relues : ${nav.filter(a => !/st-ok|home/.test(a.c)).map(a => a.t)}`);
+    eq(yearsLog(ctx).length, 42, 'la lecture en cours (21) puis une relecture complète (21)');
+  });
+  if (page) await page.close();                                   // undefined when --grep skipped the first test
 
   await test('page annuelle 2026 : résumé, mise en page, étiquettes, #n36, aucune requête pour 2026', async () => {
     const c = await fakeContext(browser, T2026);
@@ -297,14 +318,19 @@ async function offline(browser) {
   await test('premier passage avec 2019 injoignable : absente des résultats, signalée « aucune copie »', async () => {
     const c = await fakeContext(browser, T2026);
     c.fake.years[2019] = 'abort';
+    c.fake.years[2010] = synth(2010, 0);                            // past year online with its header only
     const p = await openWith(c, `${SITE}Accueil.html`, 'v2');
+    await p.waitForTimeout(1000);
+    await bar(p, r => r.getElementById('export').click());
+    assert(/aucune copie, le CSV brut sera complet à la fin/.test(await bar(p, r => r.getElementById('meta').textContent)), 'CSV brut refusé au premier chargement');
     await waitIdle(p);
-    eq(await metaCount(p), total(2026, [2019]), 'thèses sans 2019');
+    eq(await metaCount(p), total(2026, [2019, 2010]), 'thèses sans 2019 ni 2010');
+    assert(/2010/.test(await bar(p, r => r.getElementById('warn').textContent)), 'année passée vide signalée (anomalie)');
     const warn = await bar(p, r => r.getElementById('warn').textContent);
     assert(/2019/.test(warn) && /aucune copie/.test(warn), `avertissement : ${warn}`);
     const { text } = await downloadText(p, () => bar(p, r => r.getElementById('export').click()));
-    assert(csvLines(text) - 1 === total(2026, [2019]), 'CSV brut sans 2019');
-    assert(/Années absentes de l'export \(non lues\) : 2019/.test(await bar(p, r => r.getElementById('meta').textContent)), 'export : année manquante signalée');
+    assert(csvLines(text) - 1 === total(2026, [2019, 2010]), 'CSV brut sans 2019 ni 2010');
+    assert(/Années absentes de l'export \(non lues\) : 2010, 2019/.test(await bar(p, r => r.getElementById('meta').textContent)), 'export : années manquantes signalées');
     await c.close();
   });
 
@@ -331,6 +357,29 @@ async function offline(browser) {
     await c.close();
   });
 
+  await test('n° partagé avec une seule ligne dans le fichier des spécialités : pas de spécialité volée, pas de fiche ambiguë', async () => {
+    const c = await fakeContext(browser, T2026);
+    c.fake.spe = FIX('specialites-extrait.csv').toString('utf8').split('\n').filter(l => !/^2026,36,BADRAN/.test(l)).join('\n');
+    assert(!/^2026,36,BADRAN/m.test(c.fake.spe) && /^2026,36,CHEKROUNI/m.test(c.fake.spe), 'extrait modifié');
+    const p = await openWith(c, `${SITE}annee-htm/2026.htm`, 'v2');
+    await waitIdle(p);
+    await p.waitForFunction(() => document.querySelectorAll('.fmpm-u-badges').length > 100);
+    const rows36 = await p.evaluate(() => [...document.querySelectorAll('tr')].filter(tr => (tr.querySelector('td,th')?.textContent || '').trim().replace(/^0+/, '') === '36')
+      .map(tr => ({ who: tr.children[1].textContent.trim(), badges: tr.querySelector('.fmpm-u-badges')?.textContent || '' })));
+    const badran = rows36.find(r => /BADRAN/i.test(r.who)), chek = rows36.find(r => /CHEKROUNI/i.test(r.who));
+    assert(badran && !/Chirurgie générale/.test(badran.badges), `BADRAN sans la spécialité de CHEKROUNI : ${badran && badran.badges}`);
+    assert(chek && /Chirurgie générale/.test(chek.badges), `CHEKROUNI garde la sienne : ${chek && chek.badges}`);
+    await bar(p, r => { const q = r.getElementById('q'); q.value = 'chekrouni'; q.dispatchEvent(new Event('input')); });
+    await p.waitForTimeout(400);
+    const { text } = await downloadText(p, () => bar(p, r => r.getElementById('export2').click()));
+    const lines = text.split('\n').filter(l => /CHEKROUNI/i.test(l));
+    const l36 = lines.find(l => /^2026,36,/.test(l)), l100 = lines.find(l => /^2026,100,/.test(l));
+    assert(l36 && !/thesefmpm3/.test(l36), `n° 36 (partagé) : pas de fiche These2.0 — ${l36}`);
+    assert(l100 && /thesefmpm3\.vercel\.app\/these\/these100-26/.test(l100), `n° 100 : fiche — ${l100}`);
+    eq(c.fake.errors, [], 'erreurs JavaScript');
+    await c.close();
+  });
+
   await test('cohabitation : v2 deux fois = une barre ; v0.1 puis v2 = v2 remplace ; v2 puis v0.1 = v0.1 s’arrête', async () => {
     const c = await fakeContext(browser, T2026);
     const p = await openWith(c, `${SITE}Accueil.html`, 'v2', 'v2');
@@ -339,13 +388,63 @@ async function offline(browser) {
     const p2 = await openWith(c, `${SITE}annee-htm/2026.htm`, 'v01');
     await p2.waitForTimeout(300);
     await p2.addScriptTag({ content: CODE.v2 });
-    eq(await p2.evaluate(() => [...document.querySelectorAll('#fmpm-search-host')].map(h => h.dataset.version)), ['2.0.0'], 'barre de v2 seule');
+    eq(await p2.evaluate(() => [...document.querySelectorAll('#fmpm-search-host')].map(h => h.dataset.version)), ['2.0.2'], 'barre de v2 seule');
     await p2.waitForFunction(() => document.querySelectorAll('.fmpm-u-badges').length > 100, null, { timeout: 30000 });
     await p2.waitForTimeout(12000);                                  // v0.1 finishes its own load and labels the table
     eq(await p2.evaluate(() => document.querySelectorAll('.fmpm-badges').length), 0, 'étiquettes de v0.1 retirées');
     assert(/ancienne version/.test(await bar(p2, r => r.getElementById('warn').textContent)), 'conseil : désactiver v0.x');
     const p3 = await openWith(c, `${SITE}annee-htm/2026.htm`, 'v2', 'v01', 'v0');
     eq(await p3.evaluate(() => document.querySelectorAll('#fmpm-search-host').length), 1, 'v0.1 et v0-stable s’arrêtent');
+    await c.close();
+  });
+
+  await test('site modifié : colonne ajoutée, octet windows-1252 égaré dans la page UTF-8 → lecture juste', async () => {
+    const c = await fakeContext(browser, T2026);
+    const html2019 = new TextDecoder('windows-1252').decode(FIX('2019.htm'))
+      .replace(/<tr[^>]*>[\s\S]*?<\/tr>/gi, tr => tr.replace(/<\/t[dh]>/i, m => `${m}<td>${/ORD/.test(tr) ? 'DATE' : '14/01/2019'}</td>`));
+    c.fake.years[2019] = html2019;                                  // served as UTF-8 text
+    const b2026 = FIX('2026.htm'), at = b2026.indexOf('</head>');
+    c.fake.years[2026] = Buffer.concat([b2026.subarray(0, at), Buffer.from('<!-- \xe9 -->', 'latin1'), b2026.subarray(at)]);
+    const p = await openWith(c, `${SITE}Accueil.html`, 'v2');
+    await waitIdle(p);
+    eq(await metaCount(p), total(2026), 'thèses');
+    const { text } = await downloadText(p, () => bar(p, r => r.getElementById('export').click()));
+    const l = text.split('\n').find(x => x.startsWith('2019,1,'));
+    assert(l && /^2019,1,AMRANI IDRISSI Salma,Infection du site/.test(l), `colonne ajoutée : auteur et titre à leur place — ${l}`);
+    assert(!/Ã©/.test(text) && /Évaluation|évaluation|thérapeutique/.test(text), 'octet égaré : la page UTF-8 reste UTF-8');
+    await bar(p, r => { r.getElementById('diag').open = true; });
+    await p.waitForTimeout(100);
+    assert(/octet\(s\) invalide\(s\)/.test(await bar(p, r => r.getElementById('diagbody').textContent)), 'diagnostic : octets invalides signalés');
+    eq(c.fake.errors, [], 'erreurs JavaScript');
+    await c.close();
+  });
+
+  await test('horloge en retard (2025) sur la page 2026 : l\'année affichée reste dans le ruban et le résumé', async () => {
+    const c = await fakeContext(browser, Date.UTC(2025, 9, 18, 10));
+    const p = await openWith(c, `${SITE}annee-htm/2026.htm`, 'v2');
+    await waitIdle(p);
+    const nav = await navInfo(p);
+    eq(nav[nav.length - 1].t, '2026', 'ruban jusqu’à 2026');
+    assert(/^2026 : 117 thèses en ligne/.test(await bar(p, r => r.getElementById('yearinfo').textContent)), 'résumé 2026');
+    await c.close();
+  });
+
+  await test('diagrammes au clavier : barre de spécialité (Entrée = filtre, focus gardé), année épinglée sans masquer les autres', async () => {
+    const c = await fakeContext(browser, T2026);
+    const p = await openWith(c, `${SITE}Accueil.html`, 'v2');
+    await waitIdle(p);
+    await p.waitForFunction(() => document.getElementById('fmpm-diagrams-host').shadowRoot.querySelector('#c-spe [role="button"][data-spe]'));
+    const f = (fn, a) => p.evaluate(([s, x]) => new Function('r', 'a', `return (${s})(r, a)`)(document.getElementById('fmpm-diagrams-host').shadowRoot, x), [fn.toString(), a]);
+    const spe = await f(r => { const g = r.querySelector('#c-spe [role="button"][data-spe]'); g.focus(); return g.dataset.spe; });
+    await p.keyboard.press('Enter');
+    eq(await bar(p, r => [...r.querySelectorAll('#chips [data-f]')].map(x => x.dataset.f)), ['spe'], 'filtre spécialité posé au clavier');
+    eq(await f(r => r.activeElement && r.activeElement.dataset.spe), spe, 'focus revenu sur la même barre');
+    assert(/résultat/.test(await bar(p, r => r.getElementById('sr').textContent)), 'nombre de résultats annoncé (lecteur d’écran)');
+    await bar(p, r => r.querySelector('#chips [data-f="spe"]').click());   // back to all theses
+    await f(r => r.querySelector('.bar-slot[data-year="2019"]').focus());
+    await p.keyboard.press('Enter');
+    eq(await f(r => r.querySelectorAll('.bar-slot').length), 21, 'année épinglée : les 21 barres restent visibles');
+    eq(await f(r => r.activeElement && r.activeElement.dataset.year), '2019', 'focus sur la barre 2019');
     await c.close();
   });
 
@@ -365,23 +464,29 @@ async function offline(browser) {
     eq(yearsLog(c).length, 1, 'une seule requête (liste 2026) en dépliant');
     const info = await dock(r => r.getElementById('info').textContent);
     assert(/lié à 2 lignes/.test(info) && /BADRAN/.test(info) && /n° partagé/.test(info), `infos : ${info}`);
+    eq(await dock(r => [...r.querySelectorAll('[data-cite]')].map(b => b.textContent.replace(/\s+/g, ' ').trim())).then(a => a.length), 2, 'une référence par thèse du PDF partagé');
+    eq(await dock(r => r.getElementById('box').firstElementChild.className), 'pill', 'bouton avant le panneau (ordre de tabulation)');
+    assert(/Navigation des thèses FMPM/.test(await dock(r => r.getElementById('tog').getAttribute('aria-label'))), 'nom accessible du bouton');
     const acts = await dock(r => [...r.querySelectorAll('#acts a')].map(a => [a.textContent, a.getAttribute('href') || '']));
     const prev = fixtureNums.filter(n => n < 36).pop(), next = fixtureNums.find(n => n > 36);
     assert(acts[0][0] === `‹ n° ${prev}` && acts[0][1].endsWith(`/these${String(prev).padStart(2, '0')}-26.pdf`), `précédente : ${acts[0]}`);
     assert(acts[1][0] === `n° ${next} ›` && acts[1][1].endsWith(`/these${String(next).padStart(2, '0')}-26.pdf`), `suivante : ${acts[1]}`);
-    assert(acts.some(([t, h]) => /These2.0/.test(t) && h === 'https://thesefmpm3.vercel.app/these/these36-26'), 'fiche These2.0');
+    assert(!acts.some(([t]) => /These2.0/.test(t)), 'pas de fiche These2.0 pour un PDF partagé par deux thèses (elle montrerait l’une pour l’autre)');
     const nav = await dock(r => [...r.querySelectorAll('#nav a')].map(a => a.textContent));
     eq(nav, ['🏠 Accueil', ...Array.from({ length: 21 }, (_, i) => String(2006 + i))], 'ruban des années');
     await p.reload(); await p.addScriptTag({ content: CODE.v2 });
     eq(await dock(r => r.getElementById('panel').hidden), false, 'déplié mémorisé');
-    await dock(r => r.getElementById('tog').click());
+    await dock(r => r.getElementById('tog').focus());
+    await p.keyboard.press('Escape');
     await p.reload(); await p.addScriptTag({ content: CODE.v2 });
-    eq(await dock(r => r.getElementById('panel').hidden), true, 'replié mémorisé');
+    eq(await dock(r => r.getElementById('panel').hidden), true, 'replié par Échap, mémorisé');
     const first = `${SITE}annee-htm/FT/2026/these${String(fixtureNums[0]).padStart(2, '0')}-26.pdf`;
     await p.goto(first); await p.addScriptTag({ content: CODE.v2 });
     await dock(r => r.getElementById('tog').click());
     await p.waitForFunction(() => document.getElementById('fmpm-ultra-dock').shadowRoot.querySelector('#acts a'));
     assert(/aucune/.test(await dock(r => r.querySelector('#acts a').textContent)), 'première thèse : pas de précédente');
+    const id = `these${String(fixtureNums[0]).padStart(2, '0')}-26`;
+    assert(await dock((r, a) => [...r.querySelectorAll('#acts a')].some(x => x.href === `https://thesefmpm3.vercel.app/these/${a}`), id), 'fiche These2.0 d’une thèse non partagée');
     eq(c.fake.errors, [], 'erreurs JavaScript');
     await c.close();
   });
@@ -399,7 +504,7 @@ async function offline(browser) {
     await c.close();
   });
 
-  await test('v0.1-diagrams et v0-stable 1.2.0 : une année en échec garde sa copie au lieu de disparaître', async () => {
+  await test('v0.1-diagrams et v0-stable 1.2.1 : années en échec (dont l\'année en cours en 404) gardées, surlignage, PDF de résumé', async () => {
     for (const k of ['v01', 'v0']) {
       const c = await fakeContext(browser, T2026);
       const p = await openWith(c, `${SITE}Accueil.html`, k);
@@ -407,11 +512,18 @@ async function offline(browser) {
       await p.waitForFunction(() => /thèses lues/.test(document.getElementById('fmpm-search-host').shadowRoot.getElementById('meta').textContent), null, { timeout: 60000 });
       assert((await meta()).startsWith(`${total(2026)} thèses lues`), `${SRC[k]} : ${await meta()}`);
       c.fake.years[2019] = 'abort';
+      c.fake.years[2026] = 404;                                      // the current year's page disappears for a while
       await p.evaluate(() => document.getElementById('fmpm-search-host').shadowRoot.getElementById('reload').click());
       await p.waitForTimeout(500);
       await p.waitForFunction(() => /thèses lues/.test(document.getElementById('fmpm-search-host').shadowRoot.getElementById('meta').textContent), null, { timeout: 60000 });
       assert((await meta()).startsWith(`${total(2026)} thèses lues`), `${SRC[k]} après échec de 2019 : ${await meta()}`);
-      assert(/non lue/.test(await meta()), `${SRC[k]} signale l'année non lue : ${await meta()}`);
+      assert(/2 année\(s\) non lue\(s\), copie précédente utilisée/.test(await meta()), `${SRC[k]} signale les années non lues : ${await meta()}`);
+      await p.evaluate(() => { const q = document.getElementById('fmpm-search-host').shadowRoot.getElementById('q'); q.value = 'lupus ar'; q.dispatchEvent(new Event('input')); });
+      await p.waitForTimeout(400);
+      const res = await p.evaluate(() => document.getElementById('fmpm-search-host').shadowRoot.getElementById('res').innerText);
+      assert(/lupus/i.test(res) && !/ark>/.test(res), `${SRC[k]} surlignage intact : ${res.slice(0, 120)}`);
+      const pa = await openWith(c, `${SITE}annee-htm/art/2007/article05-07.pdf`, k);
+      eq(await pa.evaluate(() => !!document.getElementById('fmpm-search-host')), false, `${SRC[k]} ne s'installe pas sur un PDF de résumé`);
       const yrs = await p.evaluate(() => document.getElementById('fmpm-search-host').shadowRoot.getElementById('years').textContent);
       assert(/2019erreur.*copie du/.test(yrs.replace(/\s+/g, '')) || /2019.*copie/.test(yrs), `${SRC[k]} tableau des années : ${yrs.slice(0, 200)}`);
       eq(c.fake.errors, [], `${SRC[k]} erreurs JavaScript`);
