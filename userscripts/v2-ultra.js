@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         FMPM thèses — Ultra : recherche, diagrammes, années, PDF
 // @namespace    https://github.com/achma-learning/these
-// @version      2.0.1
+// @version      2.0.2
 // @description  Catalogue officiel des thèses FMPM : recherche dans toutes les années (lues en direct), ruban 🏠 Accueil + 2006 → année en cours (suit le calendrier), résumé et étiquettes sur chaque page annuelle, diagrammes (spécialités FMPM, type d'étude, hôpitaux, langue, mots), exports CSV, diagnostic. Sur les PDF de thèse : un petit bouton pour revenir à l'accueil, à la liste de l'année, ou passer à la thèse précédente / suivante.
 // @homepageURL  https://github.com/achma-learning/theses-maroc/tree/main/userscripts
 // @match        https://wd.fmpm.uca.ma/biblio/theses/*
@@ -38,7 +38,7 @@
  */
 (function () {
   'use strict';
-  const VERSION = '2.0.1';
+  const VERSION = '2.0.2';
   const D = document;
   if (!D.body || D.documentElement.hasAttribute('data-fmpm-ultra')) return; // no page, or already running
   D.documentElement.setAttribute('data-fmpm-ultra', VERSION);
@@ -48,9 +48,6 @@
   const BASE = new URL('annee-htm/', SITE);
   const HOME = new URL('Accueil.html', SITE).href;
   const FIRST_YEAR = 2006;
-  // Follows the calendar: read at every page load, so the year list needs no edit next January.
-  const LAST_YEAR = Math.max(FIRST_YEAR, new Date().getFullYear());
-  const YEARS_ALL = Array.from({ length: LAST_YEAR - FIRST_YEAR + 1 }, (_, i) => FIRST_YEAR + i);
   const PAUSE_MS = 400, TIMEOUT_MS = 20000, SPE_TIMEOUT_MS = 30000;
   const HOUR = 3600 * 1000;
   const TTL_RECENT = 12 * HOUR, TTL_OLD = 7 * 24 * HOUR, RETRY_MS = 15 * 60 * 1000, SPE_TTL = 24 * HOUR;
@@ -70,6 +67,26 @@
   const PDF_M = PATH.match(/\/annee-htm\/(FT|art)\/(\d{4})\/([^/]+)$/i);
   const PAGE_YEAR = Number((PATH.match(/\/annee-htm\/(\d{4})\.htm$/i) || [])[1]) || null;
   const ROUTE = /\.pdf$/i.test(PATH) ? 'pdf' : PAGE_YEAR ? 'year' : 'site';
+
+  // ---- Years: 2006 → the current year, read from the clock at every page (nothing to edit next January) ----
+  // A clock that is behind must not hide a year the site already has (the page being viewed, a year in the
+  // cache), and a clock far ahead must not make the script ask for a dozen future pages: at most 2 years past
+  // the newest year known.
+  const CLOCK_YEAR = new Date().getFullYear();
+  const CACHED_YEAR = (() => {
+    let m = 0;
+    try {
+      for (const k of Object.keys(localStorage)) {
+        const y = Number((k.match(/^fmpm-ultra-v1:year:(\d{4})$/) || [])[1]);
+        if (y && y > m) { const e = JSON.parse(localStorage.getItem(k)); if (e && e.good && e.good.rows && e.good.rows.length) m = y; }
+      }
+    } catch { /* storage blocked */ }
+    return m;
+  })();
+  const PDF_YEAR = PDF_M ? Number(PDF_M[2]) : 0;
+  const KNOWN_YEAR = Math.max(CACHED_YEAR, ...[PAGE_YEAR || 0, PDF_YEAR].filter(y => y <= Math.max(CLOCK_YEAR, CACHED_YEAR) + 1));
+  const LAST_YEAR = Math.max(FIRST_YEAR, KNOWN_YEAR, KNOWN_YEAR ? Math.min(CLOCK_YEAR, KNOWN_YEAR + 2) : CLOCK_YEAR);
+  const YEARS_ALL = Array.from({ length: LAST_YEAR - FIRST_YEAR + 1 }, (_, i) => FIRST_YEAR + i);
 
   // ---- Helpers --------------------------------------------------------------------------------------------
   const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -113,39 +130,56 @@
   };
 
   // ---- Reading the official year pages -------------------------------------------------------------------
-  // Older pages are windows-1252, 2026 is UTF-8, and the server sends no charset: valid UTF-8 wins.
+  // Older pages are windows-1252, 2026 is UTF-8, and the server sends no charset: valid UTF-8 wins. A UTF-8
+  // page with a few stray windows-1252 bytes (hand-edited) stays UTF-8 — one bad byte must not turn the whole
+  // year into « Ã© »; text that is mostly invalid UTF-8 is windows-1252.
   function decode(buf) {
-    try { return { text: new TextDecoder('utf-8', { fatal: true }).decode(buf), enc: 'utf-8' }; }
-    catch { return { text: new TextDecoder('windows-1252').decode(buf), enc: 'windows-1252' }; }
+    try { return { text: new TextDecoder('utf-8', { fatal: true }).decode(buf), enc: 'utf-8' }; } catch { /* not clean UTF-8 */ }
+    const u = new TextDecoder('utf-8').decode(buf);
+    const bad = (u.match(/\uFFFD/g) || []).length, good = (u.match(/[^\x00-\x7F\uFFFD]/g) || []).length;
+    if (good > bad) return { text: u, enc: `utf-8 (${bad} octet(s) invalide(s))` };
+    return { text: new TextDecoder('windows-1252').decode(buf), enc: 'windows-1252' };
   }
 
   // One <tr> per thesis: N° | Auteur | Titre | TEXTE INTEGRAL (+ article link 2006-2014).
   // The site prints some lines twice (2023-125, 2025-329): same N° + same author = one thesis. It also
   // gives one N° to two different theses (2025-214, 2026-26/36/63): both are kept.
+  // Columns come from the header row (« ORD | AUTEUR | TITRE | TELECHARGER » on every year page): a column
+  // added or moved on the site must not shift the authors into the titles. No header row = layout changed.
+  const cellsOf = tr => [...tr.children].filter(c => c.tagName === 'TD' || c.tagName === 'TH');
+  function columns(doc) {
+    for (const tr of doc.querySelectorAll('tr')) {
+      const txt = cellsOf(tr).map(c => norm(c.textContent));
+      const iAut = txt.findIndex(t => /\bauteurs?\b/.test(t)), iTit = txt.findIndex(t => /\btitres?\b/.test(t));
+      if (iAut >= 0 && iTit >= 0 && iAut !== iTit) {
+        const n = txt.findIndex(t => /^(ord|n°|no|num|numero)\b/.test(t));
+        return { iNum: n >= 0 ? n : 0, iAut, iTit, header: true };
+      }
+    }
+    return { iNum: 0, iAut: 1, iTit: 2, header: false };
+  }
   function parseYear(src, y, pageUrl) {
     const doc = typeof src === 'string' ? new DOMParser().parseFromString(src, 'text/html') : src;
-    const rows = [], seen = new Set();
+    const rows = [], seen = new Set(), cols = columns(doc), need = Math.max(cols.iNum, cols.iAut, cols.iTit) + 1;
     let bad = 0;
     for (const tr of doc.querySelectorAll('tr')) {
-      const cells = [...tr.children].filter(c => c.tagName === 'TD' || c.tagName === 'TH');
-      if (cells.length < 3) continue;
-      const num = clean(cells[0].textContent);
+      const cells = cellsOf(tr);
+      if (cells.length < Math.max(3, need)) continue;
+      const num = clean(cells[cols.iNum].textContent);
       if (!/^\d+$/.test(num)) continue;
-      const author = clean(cells[1].textContent);
+      const author = clean(cells[cols.iAut].textContent);
       const key = `${Number(num)}|${person(author)}`;
       if (seen.has(key)) continue;
       seen.add(key);
       const links = [...tr.querySelectorAll('a[href]')].map(a => safeUrl(a.getAttribute('href'), pageUrl)).filter(Boolean);
-      const titleCell = cells[2].cloneNode(true);
+      const titleCell = cells[cols.iTit].cloneNode(true);
       titleCell.querySelectorAll('a, .fmpm-u-badges, .fmpm-badges').forEach(a => a.remove());
       const title = clean(titleCell.textContent);
       if (!author || !title) bad++;
       rows.push({ year: y, num: String(Number(num)), author, title,
         pdf: links.find(h => /\/FT\//i.test(h)) || '', article: links.find(h => /\/art\//i.test(h)) || '' });
     }
-    // Every year page has a header row « ORD | AUTEUR | TITRE | TELECHARGER »: without it, the layout changed.
-    const looksLikeList = [...doc.querySelectorAll('tr')].some(tr => /auteur/i.test(tr.textContent) && /titre/i.test(tr.textContent));
-    return { rows, bad, looksLikeList };
+    return { rows, bad, cols, looksLikeList: cols.header };
   }
 
   // Never throws: { status: ok | empty | missing | error | anomaly, rows?, enc?, http?, detail }.
@@ -160,8 +194,9 @@
       let p;
       try { p = parseYear(text, y, url); } catch (e) { return { status: 'anomaly', enc, detail: `analyse impossible : ${e.message}` }; }
       if (p.rows.length) return { status: 'ok', rows: p.rows, enc, detail: p.bad ? `${p.bad} ligne(s) sans auteur ou titre` : '' };
-      return p.looksLikeList ? { status: 'empty', rows: [], enc, detail: 'page en ligne, aucune thèse listée' }
-        : { status: 'anomaly', enc, detail: 'page lue mais aucun tableau de thèses reconnu (mise en page changée ?)' };
+      if (!p.looksLikeList) return { status: 'anomaly', enc, detail: 'page lue mais aucun tableau de thèses reconnu (mise en page changée ?)' };
+      return y >= Math.min(CLOCK_YEAR, LAST_YEAR) ? { status: 'empty', rows: [], enc, detail: 'page en ligne, aucune thèse listée pour l’instant' }
+        : { status: 'anomaly', enc, detail: 'page en ligne sans aucune thèse, pour une année passée' };
     } catch (e) {
       return { status: 'error', detail: e && e.name === 'AbortError' ? `délai dépassé (${TIMEOUT_MS / 1000} s)` : `réseau : ${e && e.message || e}` };
     } finally { clearTimeout(timer); }
@@ -193,13 +228,15 @@
   }
 
   const ttlFor = y => y >= LAST_YEAR - 1 ? TTL_RECENT : TTL_OLD;
+  const newestGood = () => { let m = 0; for (const y in YEARS) if (YEARS[y].good && YEARS[y].good.rows.length) m = Math.max(m, +y); return m; };
+  const notYet = y => y > newestGood() && y >= Math.min(CLOCK_YEAR, LAST_YEAR); // a 404 here is a year not yet published
   function needsFetch(e, y, now = Date.now()) {
     const l = e && e.last;
     if (!l) return true;
     const age = now - l.at;
     if (age < 0) return true;                                      // clock moved back
     if (l.status === 'ok' || l.status === 'empty') return age > ttlFor(y);
-    if (l.status === 'missing' && y >= LAST_YEAR) return age > TTL_RECENT; // the new year's page, checked twice a day
+    if (l.status === 'missing' && notYet(y)) return age > TTL_RECENT; // the new year's page, checked twice a day
     return age > RETRY_MS;                                         // error, anomaly, past year gone: retry soon, not on every page
   }
 
@@ -220,7 +257,7 @@
       const stale = Date.now() - g.at > ttlFor(y);
       code = stale ? 'stale' : 'ok'; label = stale ? 'copie ancienne' : 'à jour';
     } else if (l.status === 'missing' && !g) {
-      code = 'none'; label = y >= LAST_YEAR ? 'pas encore publiée sur le site' : 'absente du site (404)';
+      code = 'none'; label = notYet(y) ? 'pas encore publiée sur le site' : 'absente du site (404)';
     } else {
       code = 'err';
       label = (l.status === 'anomaly' ? 'anomalie' : l.status === 'missing' ? 'absente du site (404)' : 'erreur') +
@@ -230,7 +267,7 @@
     return { y, code, label, n, detail: l.detail, status: l.status, shrunk: l.status === 'anomaly' ? l.shrunk : undefined, goodAt: g && g.at, lastAt: l.at, enc: g && g.enc,
       max: nums.length ? Math.max(...nums) : 0, noPdf: g ? g.rows.filter(a => !a[3]).length : 0 };
   }
-  const isProblem = v => v.code === 'err' || (v.code === 'none' && v.y < LAST_YEAR);
+  const isProblem = v => v.code === 'err' || (v.code === 'none' && !notYet(v.y));
 
   // ---- Year report: the oddities of the official list ------------------------------------------------------
   // A N° given to two theses, and a line whose author + title repeat another N° (a copy error of the list:
@@ -355,7 +392,7 @@
   // ---- Shared look ------------------------------------------------------------------------------------------
   const TOKENS = `
     :host { all: initial; }
-    .box { --surface: #fcfcfb; --ink: #0b0b0b; --ink2: #52514e; --muted: #77756e; --grid: #e4e3df; --accent: #2a78d6;
+    .box { --surface: #fcfcfb; --ink: #0b0b0b; --ink2: #52514e; --muted: #6b6963; --grid: #e4e3df; --accent: #1f66bf;
            --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s6: #008300; --s7: #6250d6; --s8: #e34948;
            --other: #b4b2ab; --hover: #eef4fc; --accent-hover: #1c5cab; --warn-bg: #fdf1dc; --warn: #8a4b00;
            font: 14px/1.45 system-ui, sans-serif; color: var(--ink); background: var(--surface); }
@@ -374,7 +411,7 @@
     .nav a.on { background: var(--accent); color: var(--surface); border-color: var(--accent); }
     .nav a.home { border-color: var(--accent); font-weight: 600; }
     .nav a.st-stale { border-style: dashed; }
-    .nav a.st-none { opacity: .6; border-style: dashed; color: var(--muted); }
+    .nav a.st-none { border-style: dashed; color: var(--muted); }
     .nav a.st-err { border-color: var(--warn); }
     .nav a.st-err::after { content: ' ⚠'; }`;
 
@@ -419,7 +456,7 @@
 
   // ---- Data state -------------------------------------------------------------------------------------------
   let DATA = { rows: [], at: 0, atMax: 0 }, INDEX = [], REPORTS = new Map();
-  let PROGRESS = '', LOADING = null, LAST_HITS = [];
+  let PROGRESS = '', LOADING = null, LAST_HITS = [], PAGE_COLS = { iNum: 0, iAut: 1, iTit: 2 };
   const FILTER = { year: PAGE_YEAR, spe: null, opt: null };             // on a year page the charts open on that year
   let MODE = 'principal';                                          // 'principal' | 'fractionnel'
 
@@ -432,6 +469,7 @@
     D.head.append(st);
     // This page is the freshest copy of its own year: no request for it.
     const p = parseYear(D, PAGE_YEAR, location.href);
+    PAGE_COLS = p.cols;
     if (p.rows.length) {
       YEARS[PAGE_YEAR] = merge(YEARS[PAGE_YEAR], { status: 'ok', rows: p.rows, enc: D.characterSet, detail: p.bad ? `${p.bad} ligne(s) sans auteur ou titre` : 'lue sur cette page' });
       store.set(`year:${PAGE_YEAR}`, YEARS[PAGE_YEAR]);
@@ -476,12 +514,14 @@
         PROGRESS = `Lecture ${y}… (${i}/${todo.length})`;
         $('reload').disabled = true;
         renderMeta();
-        YEARS[y] = merge(YEARS[y], await fetchYear(y));
+        const res = await fetchYear(y);                            // merge AFTER the fetch: a click on « Accepter »
+        const stored = store.get(`year:${y}`);                     // during it, or another tab, must not be lost
+        YEARS[y] = merge(validEntry(stored) && (!YEARS[y] || stored.last.at >= YEARS[y].last.at) ? stored : YEARS[y], res);
         store.set(`year:${y}`, YEARS[y]);
         scheduleRender();
         if (i < todo.length) await sleep(PAUSE_MS);
       }
-    })().finally(() => { LOADING = null; PROGRESS = ''; render(); });
+    })().finally(() => { LOADING = null; PROGRESS = ''; render(); announce(`Lecture terminée : ${fmt(DATA.rows.length)} thèses.`); });
     return LOADING;
   }
 
@@ -519,6 +559,7 @@
     .diag-acts { margin-top: 6px; }
     .diag-acts button { padding: 3px 10px; font-size: 12.5px; }
     textarea { width: 100%; min-height: 120px; margin-top: 6px; font: 11.5px ui-monospace, monospace; }
+    .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   </style>
   <div class="box" role="region" aria-label="Thèses FMPM : recherche, années, diagnostic">
     <div class="row">
@@ -532,7 +573,8 @@
       <button id="hide" title="Masquer la barre et les diagrammes sur cette page" aria-label="Masquer">✕</button>
     </div>
     <nav class="nav" id="nav" aria-label="Années des thèses FMPM"></nav>
-    <div class="meta" id="meta" role="status" aria-live="polite">Chargement…</div>
+    <div class="meta" id="meta">Chargement…</div>
+    <div class="sr" id="sr" role="status" aria-live="polite" aria-atomic="true"></div>
     <div class="warn" id="warn" hidden></div>
     <div class="meta" id="yearinfo"></div>
     <div class="chips" id="chips"></div>
@@ -602,22 +644,23 @@
       (y.shared.length ? ` · n° donné à deux thèses : ${y.shared.join(', ')}` : '') +
       (y.twice.length ? ` · <span title="La liste officielle répète l'auteur et le titre d'un autre n° : erreur de copie probable. Chaque n° est une thèse ; ouvrir le PDF pour savoir laquelle.">même auteur et titre sous deux n°</span> : ${y.twice.map(rs => `${esc(rs[0].author)} (${rs.map(r => r.num).join(', ')})`).join(' ; ')}` : '');
   }
-  const tableRows = () => [...D.querySelectorAll('tr')].map(tr => [tr, [...tr.children].filter(c => c.tagName === 'TD' || c.tagName === 'TH')])
-    .filter(([, cells]) => cells.length >= 3 && /^\d+$/.test(clean(cells[0].textContent)));
+  // Rows of the official table, as [tr, number cell, author cell, title cell] (columns from its header row).
+  const tableRows = () => [...D.querySelectorAll('tr')].map(tr => { const c = cellsOf(tr); return [tr, c[PAGE_COLS.iNum], c[PAGE_COLS.iAut], c[PAGE_COLS.iTit]]; })
+    .filter(([, n, a, t]) => n && a && t && /^\d+$/.test(clean(n.textContent)));
   function annotatePage() {
     if (!PAGE_YEAR) return;
     D.querySelectorAll('.fmpm-u-badges').forEach(e => e.remove());
     const byKey = new Map(DATA.rows.filter(r => r.year === PAGE_YEAR).map(r => [`${r.num}|${person(r.author)}`, r]));
     const tag = (txt, title, bg) => `<span title="${esc(title)}" style="display:inline-block;margin:3px 4px 0 0;padding:0 6px;border-radius:9px;font:11px/1.6 system-ui,sans-serif;background:${bg};color:#111">${esc(txt)}</span>`;
-    for (const [, cells] of tableRows()) {
-      const r = byKey.get(`${Number(clean(cells[0].textContent))}|${person(cells[1].textContent)}`);
+    for (const [, numCell, autCell, titCell] of tableRows()) {
+      const r = byKey.get(`${Number(clean(numCell.textContent))}|${person(autCell.textContent)}`);
       if (!r) continue;
       const s = speOf(r), f = FLAGS.get(rowKey(r));
       let html = '';
       if (s) html += tag(`${s.spe}${isSure(s) ? '' : ' ?'}`, `Spécialité FMPM (classement achma-learning/theses-maroc) : ${s.st}${s.conf != null ? `, confiance ${Math.round(100 * s.conf)} %` : ''}`, '#dbe8fb');
       if (f && f.shared) html += tag('⚠ n° partagé', BADGE_TIPS.shared(r.num), '#fde7c8');
       if (f && f.twice) html += tag(`⚠ ligne répétée : n° ${f.twice.join(', ')}`, BADGE_TIPS.twice, '#fde7c8');
-      if (html) cells[2].insertAdjacentHTML('beforeend', `<div class="fmpm-u-badges">${html}</div>`);
+      if (html) titCell.insertAdjacentHTML('beforeend', `<div class="fmpm-u-badges">${html}</div>`);
     }
   }
   // 2019.htm#n12 (link of the PDF button) = row n° 12 outlined and scrolled into view.
@@ -625,7 +668,7 @@
     const m = location.hash.match(/^#n(\d+)$/);
     D.querySelectorAll('[data-fmpm-hit]').forEach(tr => { tr.removeAttribute('data-fmpm-hit'); tr.style.outline = ''; });
     if (!PAGE_YEAR || !m) return;
-    const hits = tableRows().filter(([, cells]) => Number(clean(cells[0].textContent)) === +m[1]).map(([tr]) => tr);
+    const hits = tableRows().filter(([, numCell]) => Number(clean(numCell.textContent)) === +m[1]).map(([tr]) => tr);
     hits.forEach(tr => { tr.setAttribute('data-fmpm-hit', ''); tr.style.outline = '3px solid #eda100'; tr.style.outlineOffset = '-1px'; });
     if (hits[0]) hits[0].scrollIntoView({ block: 'center' });
   }
@@ -658,6 +701,7 @@
     const active = query || (FILTER.year && FILTER.year !== PAGE_YEAR) || FILTER.spe || FILTER.opt;
     const hits = filtered(base).slice().sort((a, b) => b.year - a.year || a.num - b.num);
     LAST_HITS = hits;
+    if (active && !LOADING) announce(`${hits.length} résultat${hits.length > 1 ? 's' : ''}`);
     $('chips').innerHTML = [
       FILTER.year && `<button class="chip" data-f="year" aria-label="Retirer le filtre année ${FILTER.year}">Année ${FILTER.year} ✕</button>`,
       FILTER.opt && `<button class="chip" data-f="opt">${esc(SHORT[FILTER.opt] || FILTER.opt)} ✕</button>`,
@@ -687,6 +731,7 @@
     return '﻿' + [header].concat(lines).map(l => l.map(v => q(String(v))).join(',')).join('\n') + '\n';
   }
   const byYearNum = rows => rows.slice().sort((a, b) => b.year - a.year || a.num - b.num);
+  const noFormula = v => /^[=+\-@\t\r]/.test(v) ? `'${v}` : v;   // a cell starting with = + - @ is not run by Excel
   const rawLine = r => [String(r.year), r.num, r.author, r.title, r.pdf, r.article];
 
   // ---- UI: diagrams in the footer ---------------------------------------------------------------------------
@@ -719,6 +764,9 @@
     .seg { display: inline-flex; border: 1px solid var(--accent); border-radius: 6px; overflow: hidden; }
     .seg button { border: 0; border-radius: 0; padding: 4px 10px; font-size: 12.5px; }
     .seg button.on { background: var(--accent); color: var(--surface); }
+    .seg button:focus-visible { outline: 2px solid var(--ink); outline-offset: -4px; }
+    [role="button"]:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+    svg g[role="button"]:focus-visible > .mk, svg g[role="button"]:focus-visible text.lab { stroke: var(--ink); stroke-width: 1px; }
     .kpi { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12.5px; color: var(--ink2); margin: 6px 0 2px; font-variant-numeric: tabular-nums; }
     .kpi b { color: var(--ink); }
     .head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -819,6 +867,8 @@
     return Array.from({ length: hi - lo + 1 }, (_, i) => lo + i);
   };
   const count = (rows, key) => rows.reduce((m, r) => { const k = key(r); if (k != null) m.set(k, (m.get(k) || 0) + 1); return m; }, new Map());
+  // A clickable chart mark reachable with Tab, announced as a button (Enter / Space = click, see the keydown handler).
+  const KEY = label => `tabindex="0" role="button" aria-label="${esc(label)}"`;
 
   // Rounded top only (4 px data-end, square at the baseline).
   function barPath(x, y, w, h, r = 4) {
@@ -847,7 +897,7 @@
     const W = Math.max(300, el.clientWidth || 900), H = 200, pad = { t: 16, r: 8, b: 26, l: 40 };
     const max = niceMax(Math.max(1, ...ys.map(y => allCounts ? (allCounts.get(y) || 0) : stacks.reduce((s, st) => s + (st.counts.get(y) || 0), 0))));
     const bw = (W - pad.l - pad.r) / ys.length, w = Math.max(4, bw * 0.68), sy = v => (H - pad.t - pad.b) * v / max;
-    let s = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${esc(label || 'Diagramme par année')}">` + axis(W, H, pad, max);
+    let s = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="${onClick ? 'group' : 'img'}" aria-label="${esc(label || 'Diagramme par année')}">` + axis(W, H, pad, max);
     ys.forEach((y, i) => {
       const x = pad.l + i * bw + (bw - w) / 2, base = H - pad.b;
       let tip = `${y}`, acc = 0, marks = '';
@@ -867,7 +917,7 @@
         tip += ` · ${st.label} : ${fmt(v)}`;
       });
       const lab = i % Math.ceil(ys.length * 34 / W) === 0 ? `<text x="${x + w / 2}" y="${H - 8}" text-anchor="middle">${String(y).slice(onClick ? 0 : 2)}</text>` : '';
-      s += `<g class="hit" data-year="${y}" data-tip="${esc(tip)}"><rect x="${pad.l + i * bw}" y="${pad.t}" width="${bw}" height="${H - pad.t - pad.b}" fill="transparent"/>${marks}</g>${lab}`;
+      s += `<g class="hit" data-year="${y}" data-tip="${esc(tip)}"${onClick ? ` ${KEY(tip)}` : ''}><rect x="${pad.l + i * bw}" y="${pad.t}" width="${bw}" height="${H - pad.t - pad.b}" fill="transparent"/>${marks}</g>${lab}`;
     });
     el.innerHTML = s + '</svg>';
     if (onClick) el.querySelectorAll('[data-year]').forEach(g => g.addEventListener('click', () => onClick(+g.dataset.year)));
@@ -907,11 +957,11 @@
     }
     const list = [...items].filter(([, it]) => it.v > 0.004).sort((a, b) => b[1].v - a[1].v);
     const total = list.reduce((a, [, it]) => a + it.v, 0), color = OPT_COLOR[opt];
-    const head = `<h4 data-opt="${esc(opt)}" title="Filtrer l'option"><span style="color:${color}">●</span> ${esc(SHORT[opt])} <small>${fmt(total)} thèses</small></h4>`;
+    const head = `<h4 data-opt="${esc(opt)}" title="Filtrer l'option" ${KEY(`Filtrer l'option ${SHORT[opt]}`)}><span style="color:${color}">●</span> ${esc(SHORT[opt])} <small>${fmt(total)} thèses</small></h4>`;
     if (!list.length) return `<div>${head}<p class="note">Aucune thèse.</p></div>`;
     const W = 420, row = 20, lw = 168, vw = 62, H = list.length * row + 2;
     const max = Math.max(...list.map(([, it]) => it.v + it.sec)), sx = v => (W - lw - vw) * v / max;
-    let svg = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${esc(`${SHORT[opt]} : ${list.slice(0, 8).map(([k, it]) => `${k} ${fmt(it.v)}`).join(', ')}`)}">`;
+    let svg = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="group" aria-label="${esc(`Spécialités, ${SHORT[opt]}`)}">`;
     list.forEach(([k, it], i) => {
       const y = i * row + 2;
       let x = lw, marks = '';
@@ -927,7 +977,7 @@
       }
       const st = Object.entries(it.st).map(([n, v]) => `${n} ${fmt(v)}`).join(', ');
       const tip = `${k} : ${fmt(it.v)} (${pct(it.v, total)}) — ${st}` + (MODE === 'principal' ? ` · fourchette ${fmt(it.sure)}–${fmt(it.v + it.sec)}` : '');
-      svg += `<g class="hit" data-spe="${esc(k)}" data-tip="${esc(tip)}"><rect x="0" y="${y - 2}" width="${W}" height="${row}" fill="transparent"/>` +
+      svg += `<g class="hit" data-spe="${esc(k)}" data-tip="${esc(tip)}" ${KEY(tip)}><rect x="0" y="${y - 2}" width="${W}" height="${row}" fill="transparent"/>` +
         `<text class="lab" x="${lw - 6}" y="${y + 10.5}" text-anchor="end"${FILTER.spe === k ? ' style="font-weight:700"' : ''}>${esc(k.length > 27 ? k.slice(0, 26) + '…' : k)}</text>` +
         `${marks}<text x="${lw + sx(Math.max(it.v, MODE === 'principal' ? it.v + it.sec : 0)) + 5}" y="${y + 10.5}">${fmt(it.v)}</text></g>`;
     });
@@ -941,13 +991,13 @@
     if (!spes.length) { el.innerHTML = '<p class="note">Aucune thèse classée.</p>'; return; }
     const W = Math.max(520, el.clientWidth || 900), lw = 190, top = 16, rh = 15;
     const cw = (W - lw - 40) / ys.length, H = top + spes.length * rh + 2, max = Math.max(...cell.values());
-    let s = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Carte spécialité par année">`;
+    let s = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="group" aria-label="Carte spécialité par année">`;
     ys.forEach((y, j) => {
       if (j % Math.ceil(ys.length * 30 / (W - lw)) === 0) s += `<text x="${lw + j * cw + cw / 2}" y="11" text-anchor="middle">${String(y).slice(2)}</text>`;
     });
     spes.forEach((k, i) => {
       const y = top + i * rh, c = OPT_COLOR[OPT_OF[k]];
-      s += `<g class="hit" data-spe="${esc(k)}" data-tip="${esc(`${k} : ${fmt(tot.get(k))} thèses`)}"><text class="lab" x="${lw - 6}" y="${y + 11}" text-anchor="end">${esc(k.length > 30 ? k.slice(0, 29) + '…' : k)}</text></g>`;
+      s += `<g class="hit" data-spe="${esc(k)}" data-tip="${esc(`${k} : ${fmt(tot.get(k))} thèses`)}" ${KEY(`${k} : ${fmt(tot.get(k))} thèses, filtrer`)}><text class="lab" x="${lw - 6}" y="${y + 11}" text-anchor="end">${esc(k.length > 30 ? k.slice(0, 29) + '…' : k)}</text></g>`;
       ys.forEach((yr, j) => {
         const v = cell.get(`${k}|${yr}`) || 0;
         s += `<g class="hit" data-spe="${esc(k)}" data-year="${yr}" data-tip="${esc(`${k} · ${yr} : ${fmt(v)}`)}"><rect class="mk" x="${lw + j * cw + 0.5}" y="${y + 0.5}" width="${cw - 1}" height="${rh - 1}" rx="2"` +
@@ -994,7 +1044,7 @@
     const label = query ? `« ${query} »` : 'toutes les thèses';
     F('fsub').textContent = `${fmt(rows.length)} thèse(s) — ${label}${FILTER.year || FILTER.spe || FILTER.opt ? ' (avec filtres)' : ''} · site officiel ${day(DATA.at) === day(DATA.atMax) ? `lu le ${day(DATA.at)}` : `lu du ${day(DATA.at)} au ${day(DATA.atMax)}`}` +
       (SPE_INFO.status === 'stale' ? ` · spécialités : copie du ${day(SPE_INFO.at)}` : '');
-    heroChart(rows, query);
+    heroChart(filtered(base, true), query);                        // all years (pin shown, not applied)
 
     if (SPE) {
       F('mode-note').textContent = MODE === 'principal'
@@ -1053,6 +1103,9 @@
   });
   froot.addEventListener('mouseleave', () => { F('tip').style.display = 'none'; }, true);
 
+  let lastSaid = '';
+  const announce = text => { if (text !== lastSaid) { lastSaid = text; $('sr').textContent = text; } };
+
   // ---- Rendering --------------------------------------------------------------------------------------------
   let renderTimer = 0;
   const scheduleRender = () => { clearTimeout(renderTimer); renderTimer = setTimeout(render, 150); };
@@ -1076,19 +1129,23 @@
   $('todiag').addEventListener('click', () => foot.scrollIntoView({ behavior: 'smooth' }));
   $('chips').addEventListener('click', e => { const c = e.target.closest('[data-f]'); if (c) { FILTER[c.dataset.f] = null; search(); } });
   $('export').addEventListener('click', () => {
-    if (LOADING) { $('meta').textContent = `Lecture du site en cours (${PROGRESS.replace(/^Lecture /, '')}) : le CSV brut sera complet à la fin, réessayez dans un instant.`; return; }
+    if (LOADING && YEARS_ALL.some(y => !YEARS[y])) {                // a year never read is still on its way
+      $('meta').textContent = `Lecture du site en cours (${PROGRESS.replace(/^Lecture /, '')}) : des années n'ont encore aucune copie, le CSV brut sera complet à la fin.`;
+      return;
+    }
     if (!DATA.rows.length) { $('meta').textContent = 'Rien à exporter : chargez d\'abord les données.'; return; }
     const d = new Date().toISOString().slice(0, 10), gaps = YEARS_ALL.map(yearView).filter(v => (isProblem(v) || v.code === 'unknown') && !v.n).map(v => v.y);
     download(`fmpm-officiel-brut-${d}.csv`, toCSV(HEADER, byYearNum(DATA.rows).map(rawLine)));
     $('meta').textContent = `Exporté : fmpm-officiel-brut-${d}.csv (${DATA.rows.length} lignes). Étape suivante : build_fmpm.py (voir archive/fmpm/methode/README.md).` +
-      (gaps.length ? ` ⚠ Années absentes de l'export (non lues) : ${gaps.join(', ')}.` : '');
+      (gaps.length ? ` ⚠ Années absentes de l'export (non lues) : ${gaps.join(', ')}.` : '') +
+      (LOADING ? ' (Relecture du site en cours : copies locales exportées.)' : '');
   });
   $('export2').addEventListener('click', () => {
     if (!LAST_HITS.length) { $('meta').textContent = 'Aucun résultat à exporter.'; return; }
     const d = new Date().toISOString().slice(0, 10);
     download(`fmpm-resultats-${d}.csv`, toCSV(HEADER_PLUS, byYearNum(LAST_HITS).map(r => {
       const s = speOf(r);
-      return rawLine(r).concat([s ? s.spe : '', s ? s.opt : '', s ? s.st : '', s && s.conf != null ? String(s.conf) : '', s ? s.sec : '', flagText(FLAGS.get(rowKey(r))), ficheOf(r)]);
+      return rawLine(r).concat([s ? s.spe : '', s ? s.opt : '', s ? s.st : '', s && s.conf != null ? String(s.conf) : '', s ? s.sec : '', flagText(FLAGS.get(rowKey(r))), ficheOf(r)]).map(noFormula);
     })));
     $('meta').textContent = `Exporté : fmpm-resultats-${d}.csv (${LAST_HITS.length} lignes, avec spécialité, statut et signalements)` +
       (LOADING ? ' — ⚠ lecture du site en cours : résultats partiels.' : '.');
@@ -1121,9 +1178,17 @@
   $('diag').addEventListener('toggle', renderDiag);
   const pin = slot => { const y = +slot.dataset.year; FILTER.year = FILTER.year === y ? null : y; search(); };
   F('h-bars').addEventListener('click', e => { const s = e.target.closest('.bar-slot'); if (s) pin(s); });
-  F('h-bars').addEventListener('keydown', e => {
-    const s = e.target.closest('.bar-slot');
-    if (s && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); pin(s); }
+  // Enter / Space on a chart mark = click; the charts are redrawn, so focus goes back to the same mark.
+  const sameMark = el => ['year', 'spe', 'opt'].filter(k => el.dataset[k] != null).map(k => `[data-${k}="${CSS.escape(el.dataset[k])}"]`).join('');
+  froot.addEventListener('keydown', e => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const el = e.composedPath().find(n => n.getAttribute && (n.classList.contains('bar-slot') || n.getAttribute('role') === 'button') && n.dataset && sameMark(n));
+    if (!el) return;
+    e.preventDefault();
+    const sel = (el.classList.contains('bar-slot') ? '.bar-slot' : '[role="button"]') + sameMark(el), card = el.closest('.card');
+    if (el.classList.contains('bar-slot')) pin(el); else el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    const again = (card && card.isConnected ? card : froot).querySelector(sel) || froot.querySelector(sel);
+    if (again) again.focus();
   });
   F('totop').addEventListener('click', () => { host.scrollIntoView({ behavior: 'smooth' }); $('q').focus(); });
   F('mode').addEventListener('click', e => {
@@ -1174,6 +1239,10 @@
     const listUrl = year ? `${yearUrl(year)}${fileNum ? `#n${fileNum}` : ''}` : HOME;
     let open = !viewer || store.get('dock') === 'open', filled = false;
 
+    // An older v0-stable / v0.1 (1.2.0 and before ran on art/ PDFs) puts its search bar over the viewer: remove it.
+    const legacy = () => ['fmpm-search-host', 'fmpm-diagrams-host'].forEach(id => { const x = D.getElementById(id); if (x) x.remove(); });
+    legacy();
+    new MutationObserver(legacy).observe(D.body, { childList: true });
     const dock = D.createElement('div');
     dock.id = 'fmpm-ultra-dock';
     dock.style.cssText = 'position:fixed;left:12px;bottom:12px;z-index:2147483647';
@@ -1183,8 +1252,7 @@
     <style>${TOKENS}
       .box { background: transparent; font-size: 13px; }
       .pill { display: inline-flex; align-items: center; gap: 2px; background: var(--surface); border: 1px solid var(--accent); border-radius: 18px;
-              padding: 2px; box-shadow: 0 2px 10px rgba(0,0,0,.25); opacity: .88; }
-      .pill:hover, .pill:focus-within, .box.open .pill { opacity: 1; }
+              padding: 2px; box-shadow: 0 2px 10px rgba(0,0,0,.25); }
       .pill a, .pill button { padding: 4px 10px; border: 0; border-radius: 14px; text-decoration: none; color: var(--accent); background: transparent; font: inherit; cursor: pointer; }
       .pill a:hover, .pill button:hover { background: var(--hover); }
       .panel { position: absolute; left: 0; bottom: calc(100% + 6px); width: min(560px, calc(100vw - 24px)); max-height: 70vh; overflow: auto;
@@ -1203,16 +1271,16 @@
       .nav { font-size: 12px; }
     </style>
     <div class="box" id="box">
+      <div class="pill">
+        <a href="${esc(HOME)}" title="Accueil des thèses FMPM" aria-label="Accueil des thèses FMPM">🏠</a>
+        ${year ? `<a href="${esc(listUrl)}" title="Liste officielle ${year}${fileNum ? `, ligne n° ${fileNum} surlignée` : ''}">← Liste ${year}</a>` : ''}
+        <button id="tog" aria-controls="panel" aria-expanded="false" aria-label="Navigation des thèses FMPM : précédente, suivante, fiche, années" title="Thèse précédente / suivante, fiche, années"><span aria-hidden="true">▴</span></button>
+      </div>
       <div class="panel" id="panel" role="region" aria-label="Navigation des thèses FMPM" hidden>
         <div class="msg" id="msg" role="alert"></div>
         <div class="info" id="info"></div>
         <div class="acts" id="acts"></div>
         <nav class="nav" id="nav" aria-label="Années des thèses FMPM"></nav>
-      </div>
-      <div class="pill">
-        <a href="${esc(HOME)}" title="Accueil des thèses FMPM" aria-label="Accueil des thèses FMPM">🏠</a>
-        ${year ? `<a href="${esc(listUrl)}" title="Liste officielle ${year}${fileNum ? `, ligne n° ${fileNum} surlignée` : ''}">← Liste ${year}</a>` : ''}
-        <button id="tog" aria-controls="panel" aria-expanded="false" title="Thèse précédente / suivante, fiche, années">▴</button>
       </div>
     </div>`;
     const R = id => sr.getElementById(id);
@@ -1221,7 +1289,7 @@
       R('panel').hidden = !open;
       R('box').classList.toggle('open', open);
       R('tog').setAttribute('aria-expanded', String(open));
-      R('tog').textContent = open ? '▾' : '▴';
+      R('tog').firstElementChild.textContent = open ? '▾' : '▴';
       R('tog').title = open ? 'Replier' : 'Thèse précédente / suivante, fiche, années';
       if (open && !filled) {
         filled = true;
@@ -1233,7 +1301,9 @@
       if (viewer) store.set('dock', open ? 'open' : 'closed');     // remembered on PDFs only, not on a 404 page
       paint();
     });
-    sr.addEventListener('keydown', e => { if (e.key === 'Escape' && open) { open = false; paint(); R('tog').focus(); } });
+    sr.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && open) { open = false; if (viewer) store.set('dock', 'closed'); paint(); R('tog').focus(); }
+    });
 
     async function fill() {
       loadCachedYears();
@@ -1244,7 +1314,8 @@
       R('info').textContent = `Lecture de la liste ${year}…`;
       let e = YEARS[year];
       if (needsFetch(e, year)) {                                   // one request, only when the dock is opened
-        e = merge(e, await fetchYear(year));
+        const res = await fetchYear(year);
+        e = merge(YEARS[year] || e, res);
         store.set(`year:${year}`, e);
         YEARS[year] = e;
         R('nav').innerHTML = ribbon(year);
@@ -1285,15 +1356,18 @@
           }).join('');
       const step = (r, txt) => r ? `<a href="${esc(link(r))}" title="${esc(`n° ${r.num} · ${r.author} — ${r.title}`)}">${txt.replace('#', esc(r.num))}</a>`
         : `<a class="off" aria-disabled="true">${txt.replace('n° #', 'aucune')}</a>`;
-      const c0 = cur[0], fiche = cur.length === 1 && ficheOf(c0), other = c0 && (isArt ? c0.pdf : c0.article);
+      // One PDF for two theses (shared N°): the list does not say which one it is, so no guess — one reference
+      // button per thesis, and no fiche or « other file » link taken from either.
+      const c0 = cur[0], one = cur.length === 1, fiche = one && ficheOf(c0), other = one && (isArt ? c0.pdf : c0.article);
       R('acts').innerHTML = step(prev, '‹ n° #') + step(next, 'n° # ›') +
         (fiche ? `<a href="${esc(fiche)}" target="_blank" rel="noopener" title="Fiche These2.0 : jury, spécialité">Fiche These2.0 ↗</a>` : '') +
         (other ? `<a href="${esc(other)}">${isArt ? 'Texte intégral' : 'Résumé (article)'}</a>` : '') +
-        (c0 ? '<button id="cite" title="Auteur. Titre. Thèse n°, FMPM, année. Lien">📋 Copier la référence</button>' : '');
-      if (c0) R('cite').addEventListener('click', async () => {
-        const ok = await copyText(`${c0.author}. ${c0.title}. Thèse n° ${c0.num}, Faculté de Médecine et de Pharmacie de Marrakech, ${year}. ${c0.pdf || location.href}`);
-        R('cite').textContent = ok ? 'Copié ✓' : 'Copie impossible';
-      });
+        cur.map((r, k) => `<button data-cite="${k}" title="Auteur. Titre. Thèse n°, FMPM, année. Lien">📋 ${one ? 'Copier la référence' : `Référence : ${esc(r.author)}`}</button>`).join('');
+      R('acts').querySelectorAll('[data-cite]').forEach(b => b.addEventListener('click', async () => {
+        const r = cur[+b.dataset.cite];
+        const ok = await copyText(`${r.author}. ${r.title}. Thèse n° ${r.num}, Faculté de Médecine et de Pharmacie de Marrakech, ${year}. ${r.pdf || location.href}`);
+        b.textContent = ok ? 'Copié ✓' : 'Copie impossible';
+      }));
     }
     paint();
   }

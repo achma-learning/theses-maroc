@@ -1,12 +1,14 @@
 // ==UserScript==
 // @name         FMPM thèses — recherche en ligne + export CSV
 // @namespace    https://github.com/achma-learning/these
-// @version      1.2.0
+// @version      1.2.1
 // @description  Ajoute une barre de recherche au catalogue officiel des thèses FMPM (toutes les années, lues en direct sur le site) et exporte le CSV brut pour mettre à jour la copie locale du dépôt.
 // @match        https://wd.fmpm.uca.ma/biblio/theses/*
 // @match        http://wd.fmpm.uca.ma/biblio/theses/*
 // @exclude      https://wd.fmpm.uca.ma/biblio/theses/annee-htm/FT/*
 // @exclude      http://wd.fmpm.uca.ma/biblio/theses/annee-htm/FT/*
+// @exclude      https://wd.fmpm.uca.ma/biblio/theses/annee-htm/art/*
+// @exclude      http://wd.fmpm.uca.ma/biblio/theses/annee-htm/art/*
 // @grant        none
 // @license MIT
 // @run-at       document-idle
@@ -26,7 +28,8 @@
  */
 (function () {
   'use strict';
-  if (/\/annee-htm\/FT\//i.test(location.pathname)) return; // PDF texte intégral : laisser le lecteur PDF
+  if (/\/annee-htm\/(FT|art)\/|\.pdf$/i.test(location.pathname)) return; // PDF (texte intégral, résumé) : laisser le lecteur PDF
+  if (document.documentElement.hasAttribute('data-fmpm-ultra')) return;     // v2-ultra is running on this page
   if (document.getElementById('fmpm-search-host')) return; // already injected
 
   const BASE = new URL('/biblio/theses/annee-htm/', location.href);
@@ -34,7 +37,8 @@
   const PAUSE_MS = 400;
   const CACHE_KEY = 'fmpm-theses-cache-v2'; // v1 counted lines printed twice on the site
   const CACHE_TTL = 24 * 3600 * 1000;
-  const RETRY_TTL = 30 * 60 * 1000;                               // a load where a year failed: tried again after 30 min
+  const RETRY_TTL = 30 * 60 * 1000;                               // a load where a year failed: tried again after 30 min,
+                                                                  // then 2 h, 8 h, 24 h while it keeps failing
   const MAX_SHOWN = 200;
   const HEADER = ['Année', 'N°', 'Auteur', 'Titre', 'PDF (texte intégral)', 'Article (résumé, 2006-2014)'];
 
@@ -87,7 +91,8 @@
   function readCache(anyAge) {
     try {
       const c = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null');
-      return c && (anyAge || Date.now() - c.at < (c.failed ? RETRY_TTL : CACHE_TTL)) ? c : null;
+      const ttl = c && c.failed ? Math.min(CACHE_TTL, RETRY_TTL * 4 ** ((c.streak || 1) - 1)) : CACHE_TTL;
+      return c && (anyAge || Date.now() - c.at < ttl) ? c : null;
     } catch { return null; }
   }
   function writeCache(data) {
@@ -104,23 +109,26 @@
     const last = new Date().getFullYear();
     const rows = [], perYear = {};
     let failed = 0;
+    const gone = [];                                                 // failed years with no copy: absent from results
     for (let y = last; y >= FIRST_YEAR; y--) {
       onProgress(`Lecture ${y}…`);
       let r;
       try { r = await fetchYear(y); } catch (e) { r = { status: 0, error: e.message, rows: [] }; }
-      if (r.status === 200) {
+      const old = prev ? prev.rows.filter(x => x.year === y) : [];
+      if (r.status === 200 && (r.rows.length || !old.length)) {
         perYear[y] = { theses: r.rows.length, sansPDF: r.rows.filter(x => !x.pdf).length, nMax: Math.max(0, ...r.rows.map(x => +x.num)) };
         rows.push(...r.rows);
-      } else if (r.status === 404 && y === last) perYear[y] = 'pas encore en ligne (HTTP 404)';
-      else {
-        const old = prev ? prev.rows.filter(x => x.year === y) : [];
+      } else if (r.status === 404 && y === last && !old.length) perYear[y] = 'pas encore en ligne (HTTP 404)';
+      else {                                                         // includes a page that suddenly lists nothing
         rows.push(...old);
         failed++;
-        perYear[y] = (r.status ? `HTTP ${r.status}` : `erreur : ${r.error}`) + (old.length ? ` — copie précédente gardée (${old.length} thèses)` : ' — aucune copie');
+        if (!old.length) gone.push(y);
+        perYear[y] = (r.status === 200 ? 'page sans aucune thèse' : r.status ? `HTTP ${r.status}` : `erreur : ${r.error}`) +
+          (old.length ? ` — copie précédente gardée (${old.length} thèses)` : ' — aucune copie');
       }
       await sleep(PAUSE_MS);
     }
-    const data = { at: Date.now(), rows, perYear, failed };
+    const data = { at: Date.now(), rows, perYear, failed, gone, streak: failed ? ((prev && prev.failed && prev.streak) || 0) + 1 : 0 };
     writeCache(data);
     return data;
   }
@@ -264,7 +272,9 @@
     INDEX = d.rows.map(r => ({ r, n: norm(`${r.author} ${r.title} ${r.year}`) }));
     const when = new Date(d.at).toLocaleString('fr-FR');
     $('meta').textContent = `${d.rows.length} thèses lues sur le site officiel (${when})` +
-      (d.failed ? ` — ⚠ ${d.failed} année(s) non lue(s), copie précédente utilisée : voir « Thèses par année »` : '') +
+      (d.failed > (d.gone || []).length ? ` — ⚠ ${d.failed - (d.gone || []).length} année(s) non lue(s), copie précédente utilisée` : '') +
+      ((d.gone || []).length ? ` — ⚠ absente(s) des résultats et de l'export (non lue, aucune copie) : ${d.gone.join(', ')}` : '') +
+      (d.failed ? ' (voir « Thèses par année »)' : '') +
       '. Recherche sans accents ; tous les mots doivent être présents.';
     $('years').innerHTML = '<table><tr><th>Année</th><th>Thèses</th><th>Sans PDF</th><th>N° max</th></tr>' +
       Object.keys(d.perYear).sort((a, b) => b - a).map(y => {
@@ -277,15 +287,12 @@
     search();
   }
 
+  // Plain case-insensitive match on the words as typed (accent-free matching is only for filtering), on the raw
+  // text: matching the escaped HTML broke it (« ar » inside « <mark> », « amp » inside « &amp; »).
   function highlight(text, terms) {
-    let out = esc(text);
-    for (const t of terms) {
-      if (t.length < 2) continue;
-      // plain case-insensitive match on the words as typed (accent-free matching is only for filtering)
-      const re = new RegExp(t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
-      out = out.replace(re, m => `<mark>${m}</mark>`);
-    }
-    return out;
+    const ts = terms.filter(t => t.length >= 2).map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    if (!ts.length) return esc(text);
+    return text.split(new RegExp(`(${ts.join('|')})`, 'gi')).map((p, i) => i % 2 ? `<mark>${esc(p)}</mark>` : esc(p)).join('');
   }
 
   function search() {
