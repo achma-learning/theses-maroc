@@ -1,5 +1,7 @@
 # Thèses de médecine au Maroc : recherche
+### my friend project : https://these-maker.vercel.app/
 
+---
 Moteur de recherche des thèses soutenues dans les facultés de médecine marocaines : FMPM Marrakech, FMPR Rabat (médecine et pharmacie) et FMP Fès. Il sert à vérifier qu'un sujet n'a pas déjà été traité.
 
 - **Page :** `index.html`. Elle lit les CSV du dossier `archive/`.
